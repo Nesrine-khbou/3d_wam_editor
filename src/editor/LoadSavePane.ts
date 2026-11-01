@@ -3,6 +3,7 @@ import { html } from "../utils/doc.ts";
 import { MOValue, OValue } from "../observable/collections/OValue.ts";
 import { ControlLibrary, WamGUICode, WamGUIGenerator, WAMGuiInitCode } from "../WamGUIGenerator.ts";
 import examples from "../examples.json"
+import { HistoryCommandRunner } from "./DocumentHistory.ts"
 
 export class LoadSavePane implements IContentRenderer{
 
@@ -21,31 +22,49 @@ export class LoadSavePane implements IContentRenderer{
         </div>
     `
 
-    load(code: WamGUICode|WAMGuiInitCode){
+    async load(code: WamGUICode|WAMGuiInitCode): Promise<void> {
         const pane = this
         if("wam_url" in code){
-            function load(){
+            const load = () => {
                 pane.gui.observable.unregister(load)
-                pane.gui.value.load(code, pane.library)
+                void pane.runHistoryCommand("Load descriptor", () =>
+                    pane.gui.value.load(code, pane.library),
+                ).catch(error => console.error("Unable to load descriptor", error))
             }
             pane.gui.observable.register(load)
             this.url.value = code.wam_url
+            return
         }
-        else this.gui.value.load(code,this.library)
+        else await this.runHistoryCommand(
+            "Load descriptor",
+            () => this.gui.value.load(code,this.library),
+        )
     }
 
 
-    constructor(private gui: OValue<WamGUIGenerator>, private url: MOValue<string>, private library: ControlLibrary){
+    constructor(
+        private gui: OValue<WamGUIGenerator>,
+        private url: MOValue<string>,
+        private library: ControlLibrary,
+        private readonly runHistoryCommand: HistoryCommandRunner = async (_label, operation) => operation(),
+    ){
         for(const [key,example] of Object.entries(examples)){
             const option = html.a`<option value=${key}>${key}</option>` as HTMLOptionElement
             option.onclick = ()=>{
                 this.textarea.value = JSON.stringify(example, null, 2)
-                this.load(example as WamGUICode)
+                void this.load(example as WamGUICode).catch(error => console.error("Unable to load example", error))
             }
             this.presets.appendChild(option)
         }
 
-        this.textarea.onchange = ()=> this.load(JSON.parse(this.textarea.value) as WamGUICode)
+        this.textarea.onchange = ()=> {
+            try{
+                void this.load(JSON.parse(this.textarea.value) as WamGUICode)
+                    .catch(error => console.error("Unable to load descriptor", error))
+            }catch(error){
+                console.error("Unable to parse descriptor JSON", error)
+            }
+        }
         this.textarea.onfocus = ()=>{
             const object = this.gui.value.save(library) as WAMGuiInitCode
             if(url.value.length>0) object.wam_url = url.value

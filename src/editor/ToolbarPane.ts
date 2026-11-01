@@ -26,7 +26,7 @@ export class ToolbarPane implements IContentRenderer{
     private button_elements = {} as Record<string,HTMLButtonElement>
     private status_element = html.a`<li class="toolbar-status" aria-live="polite"></li>`
 
-    private buttons: Record<string,{ctrl?: boolean, shift?: boolean, alt?: boolean, id:string, action:(index:string)=>void}> = {}
+    private buttons: Record<string,{ctrl?: boolean, shift?: boolean, alt?: boolean, id:string, action:(index:string)=>void}[]> = {}
 
     constructor(
         ...items: ToolbarItem[]
@@ -73,7 +73,9 @@ export class ToolbarPane implements IContentRenderer{
         i=0
         for(const {action,shortcut,id} of items.filter(it=>typeof it == "object" && "action" in it)){
             for(let {key,alt,ctrl,shift} of shortcut??[]){
-                this.buttons[this.normalizeKey(key)] = {ctrl,alt,shift,action,id}
+                const normalizedKey = this.normalizeKey(key)
+                this.buttons[normalizedKey] ??= []
+                this.buttons[normalizedKey].push({ctrl,alt,shift,action,id})
             }
             i++
         }
@@ -98,15 +100,14 @@ export class ToolbarPane implements IContentRenderer{
         if(event.defaultPrevented || event.repeat) return
         if(isEditableShortcutTarget(event.target) || isEditableShortcutTarget(document.activeElement)) return
 
-        const binding = this.buttons[this.normalizeKey(event.key)]
+        const bindings = this.buttons[this.normalizeKey(event.key)]
+        if(!bindings)return
+        const binding = bindings.find(({ctrl,shift,alt,id}) =>
+            !this.button_elements[id].disabled && matchesShortcutModifiers({ctrl,shift,alt}, event),
+        )
         if(!binding)return
 
-        const {action,id,alt,ctrl,shift} = binding
-
-        if(this.button_elements[id].disabled) return
-        if(!matchesShortcutModifiers({ctrl,shift,alt}, event)) return
-
-        action(id)
+        binding.action(binding.id)
 
         event.preventDefault()
     }

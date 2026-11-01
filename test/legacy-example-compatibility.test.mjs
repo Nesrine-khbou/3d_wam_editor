@@ -365,3 +365,31 @@ test("V2 logical width rejects undeclared, legacy, non-finite, and non-positive 
         generator.dispose();
     }
 });
+
+test("V2 face transforms survive generator save/load for history snapshots", async () => {
+    const { library } = createMockControlLibrary(["fixture_control"]);
+    const generator = libraryApi.WamGUIGenerator.create({});
+    const descriptor = {
+        schema_version: 2,
+        required_features: ["wam3dgenerator.face-transform.v1"],
+        aspect_ratio: 1,
+        size: 0.8,
+        top_color: "#ffffff",
+        bottom_color: "#000000",
+        face_transform: { x: 0.125, scale: 1.5 },
+        controls: [],
+    };
+
+    try {
+        await generator.load(descriptor, library);
+        assert.deepEqual(generator.save(library).face_transform, descriptor.face_transform);
+        await generator.load(generator.save(library), library);
+        assert.deepEqual(generator.save(library).face_transform, descriptor.face_transform);
+        await assert.rejects(
+            generator.load({ ...descriptor, required_features: [] }, library),
+            /requires the "wam3dgenerator.face-transform.v1" feature declaration/,
+        );
+    } finally {
+        generator.dispose();
+    }
+});

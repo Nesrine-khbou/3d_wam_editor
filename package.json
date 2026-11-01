@@ -7,7 +7,7 @@
     "dev": "vite dev --port 5172",
     "expose": "vite dev --port 5172 --host",
     "build": "tsc && vite build",
-    "test": "npm run lib && node --test test/legacy-example-compatibility.test.mjs test/v2-descriptor-contract.test.mjs test/thumbnail-reference.test.mjs test/editor-interactions.test.mjs",
+    "test": "npm run lib && node --test test/legacy-example-compatibility.test.mjs test/v2-descriptor-contract.test.mjs test/thumbnail-reference.test.mjs test/editor-interactions.test.mjs test/document-history.test.mjs",
     "preview": "vite preview",
     "lib": "vite build -c vite_lib.config.js",
     "postinstall": "npm run lib"

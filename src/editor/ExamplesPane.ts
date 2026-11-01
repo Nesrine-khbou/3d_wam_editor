@@ -4,6 +4,7 @@ import controls from "../control/controls.ts";
 import { html } from "../utils/doc.ts";
 import { MOValue, OValue } from "../observable/collections/OValue.ts";
 import { DEFAULT_CONTROL_CONTEXT_TARGET } from "../control/Control.ts";
+import { HistoryCommandRunner } from "./DocumentHistory.ts"
 
 export class ExamplesPane implements IContentRenderer{
 
@@ -13,20 +14,26 @@ export class ExamplesPane implements IContentRenderer{
         private examples: Record<string,WAMGuiInitCode>,
         private gui: OValue<WamGUIGenerator>,
         private url: MOValue<string>,
-        private library: ControlLibrary
+        private library: ControlLibrary,
+        private readonly runHistoryCommand: HistoryCommandRunner = async (_label, operation) => operation(),
     ){}
 
-    load(code: WamGUICode|WAMGuiInitCode){
+    async load(code: WamGUICode|WAMGuiInitCode): Promise<void> {
         const pane = this
         if("wam_url" in code){
-            function load(){
+            const load = () => {
                 pane.gui.observable.unregister(load)
-                pane.gui.value.load(code, pane.library)
+                void pane.runHistoryCommand("Load example", () =>
+                    pane.gui.value.load(code, pane.library),
+                ).catch(error => console.error("Unable to load example", error))
             }
             pane.gui.observable.register(load)
             this.url.value = code.wam_url
         }
-        else this.gui.value.load(code,this.library)
+        else await this.runHistoryCommand(
+            "Load example",
+            () => this.gui.value.load(code,this.library),
+        )
     }
 
     init(_: GroupPanelPartInitParameters): void {
@@ -48,7 +55,9 @@ export class ExamplesPane implements IContentRenderer{
                         <span class="-label">${key}</span>
                     </li>
                 `)
-                entry.onclick = ()=> this.load(code as WamGUICode)
+                entry.onclick = ()=> {
+                    void this.load(code as WamGUICode).catch(error => console.error("Unable to load example", error))
+                }
                 list.appendChild(entry)
             })()
         }

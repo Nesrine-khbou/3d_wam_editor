@@ -89,6 +89,17 @@ This is the persistent handoff log for feature work in this project. Read it bef
 - **Known pitfalls:** The external WAM Jam Party adapter is not in this checkout. Broader manual verification of moving/resizing controls and keyboard modifiers across browsers remains advisable.
 - **Next step:** Task 7.1 — define document history representation, history boundaries and a practical history limit.
 
+#### Feature: Editor document undo and redo
+
+- **Status:** Verified
+- **Goal:** Record editor authoring changes in a bounded document history and let users undo/redo edits without capturing live WAM runtime state.
+- **Progress:** Added descriptor-snapshot history with a 100-entry undo limit, async command support, no-op detection, redo-branch clearing, and visible state notifications. Integrated atomic history commands for add/remove/replace/cut/paste/duplicate/alignment and auto-layout application. Control and body input edits are coalesced through change events; pointer/mouse moves and resizes, including grouped transforms, are recorded per gesture. Undo/redo toolbar actions and Ctrl/Cmd+Z, Ctrl/Cmd+Y, Ctrl/Cmd+Shift+Z shortcuts reflect availability. WAM replacement resets the history boundary; clipboard-only and live parameter changes remain outside the document snapshots. Generator load/save now preserves optional declared V2 `face_transform` metadata so descriptor history can round-trip it.
+- **Relevant files:** `src/editor/DocumentHistory.ts` (bounded transaction manager); `src/editor2.ts` (history snapshots, command wrappers, gesture hooks, toolbar shortcuts); `src/editor/ToolbarPane.ts` (multiple exact-modifier bindings per key); `src/editor/WamPadPane.ts` (history-aware reference ratio/texture actions); `src/editor/AutoLayoutPane.ts` (atomic generated-layout application); `src/editor/LoadSavePane.ts` and `src/editor/ExamplesPane.ts` (history-aware descriptor load); `src/WamGUIGenerator.ts` (face-transform metadata preservation); `test/document-history.test.mjs` and `test/legacy-example-compatibility.test.mjs` (history and metadata regression tests); `EDITOR_V2_SPECIFICATION.md` (Task 7 contract).
+- **Decisions and constraints:** Each entry stores cloned before/after `WamGUICode` snapshots; runtime WAM parameter state, editor workspace settings, and clipboard-only changes are excluded. History is session-local and resets when the active WAM changes. Imported WAM projects become a new history boundary. A failed operation is surfaced and any partial document changes remain undoable. Face-transform metadata is preserved but not rendered or edited here; texture-transform UI/rendering remains Task 8.
+- **Validation:** `npm run build` passed; `npm test` passed (79 tests, 0 failures); browser smoke testing changed the body aspect ratio, confirmed Undo/Redo enabled states, and verified value round-trips through both toolbar buttons and Ctrl+Z/Ctrl+Y. `git diff --check` passed. The library declaration step continues to print existing TS4094 diagnostics from unrelated control-value files.
+- **Known pitfalls:** The external WAM Jam Party adapter remains outside this checkout. Full interactive verification of grouped control drag/resize and Apply Auto Layout remains advisable. Texture-transform UI and rendering are not implemented yet.
+- **Next step:** Task 8.1 — define UV translation origin/pivot, rotation convention and uniform-scale semantics.
+
 ### Feature entry template
 
 Copy this section for each new feature. Keep the feature name stable when updating it in later sessions.

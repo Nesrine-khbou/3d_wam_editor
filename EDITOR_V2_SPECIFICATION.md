@@ -471,12 +471,12 @@ Implement in numbered increments. Each subtask should be independently reviewabl
 
 ### 8.7 Task 7 — Implement document undo/redo
 
-- **7.1** Define document history representation, history boundaries and a practical history limit.
-- **7.2** Record add/remove/replace/clipboard operations and grouped geometry changes.
-- **7.3** Record control settings, body settings, texture transforms and auto-layout as one logical operation.
-- **7.4** Coalesce pointer drags, resizes and slider scrubs into one history entry per completed gesture.
-- **7.5** Add toolbar actions, keyboard shortcuts, disabled states and redo-branch clearing.
-- **7.6** Test undo/redo round-trips for each command category and verify live WAM parameter changes are excluded.
+- **7.1** Define document history representation, history boundaries and a practical history limit. **Implemented:** history stores cloned before/after editor descriptors, has a 100-entry undo limit, clears on WAM replacement, and excludes runtime WAM parameter state and clipboard-only changes.
+- **7.2** Record add/remove/replace/clipboard operations and grouped geometry changes. **Implemented:** add, remove, replace, cut, paste, duplicate and alignment commands are atomic entries; pointer movement/resizing records complete descriptor geometry, including groups.
+- **7.3** Record control settings, body settings, texture transforms and auto-layout as one logical operation. **Implemented:** control/body setting edits are captured as document snapshots, reference-ratio/texture actions and Apply Auto Layout are single commands, and optional V2 `face_transform` metadata now survives generator load/save for history round-trips. Texture-transform editing/rendering remains Task 8.
+- **7.4** Coalesce pointer drags, resizes and slider scrubs into one history entry per completed gesture. **Implemented:** document-form input/change events and control pointer/mouse gestures use begin/commit transactions, with no-op transactions discarded.
+- **7.5** Add toolbar actions, keyboard shortcuts, disabled states and redo-branch clearing. **Implemented:** Undo/Redo toolbar controls use Ctrl/Cmd+Z, Ctrl/Cmd+Y, and Ctrl/Cmd+Shift+Z; disabled states follow history availability and a new edit clears the redo branch.
+- **7.6** Test undo/redo round-trips for each command category and verify live WAM parameter changes are excluded. **Implemented:** history tests cover command categories, undo/redo, coalescing, no-ops, limits, branch clearing, failed restores, runtime parameter exclusion, and V2 face-transform load/save preservation.
 
 ### 8.8 Task 8 — Add precise body texture transforms
 

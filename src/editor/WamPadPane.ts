@@ -4,6 +4,7 @@ import { OValue } from "../observable/collections/OValue.ts"
 import { WamGUIGenerator } from "../WamGUIGenerator.ts"
 import { DECORATION_SHAPE_MODIFIER, DECORATION_SHAPE_POINTS } from "../utils/visual/Decoration.ts"
 import { WamThumbnailReference } from "../utils/thumbnail-reference.ts"
+import { HistoryCommandRunner } from "./DocumentHistory.ts"
 
 export class WamPadPane implements IContentRenderer{
 
@@ -56,7 +57,11 @@ export class WamPadPane implements IContentRenderer{
         </div>
     `
 
-    constructor(gui_generator: OValue<WamGUIGenerator>, private readonly thumbnailReference: WamThumbnailReference){
+    constructor(
+        gui_generator: OValue<WamGUIGenerator>,
+        private readonly thumbnailReference: WamThumbnailReference,
+        private readonly runHistoryCommand: HistoryCommandRunner = async (_label, operation) => operation(),
+    ){
         const pane = this
 
         gui_generator.link(({to:gui})=>{
@@ -95,14 +100,27 @@ export class WamPadPane implements IContentRenderer{
         }
         this.use_reference_ratio.onclick = () => {
             const state = this.thumbnailReference.state.value
-            if(state.status === "ready") gui_generator.value.aspect_ratio.value = state.aspectRatio
+            if(state.status === "ready"){
+                void this.runHistoryCommand(
+                    "Set aspect ratio from reference",
+                    () => { gui_generator.value.aspect_ratio.value = state.aspectRatio },
+                ).catch(error => console.error("Unable to set aspect ratio from reference", error))
+            }
         }
         this.reset_aspect_ratio.onclick = () => {
-            gui_generator.value.aspect_ratio.value = 1
+            void this.runHistoryCommand(
+                "Reset aspect ratio",
+                () => { gui_generator.value.aspect_ratio.value = 1 },
+            ).catch(error => console.error("Unable to reset aspect ratio", error))
         }
         this.use_reference_texture.onclick = () => {
             const state = this.thumbnailReference.state.value
-            if(state.status === "ready") gui_generator.value.front_face.value = state.url
+            if(state.status === "ready"){
+                void this.runHistoryCommand(
+                    "Use reference as body texture",
+                    () => { gui_generator.value.front_face.value = state.url },
+                ).catch(error => console.error("Unable to use reference as body texture", error))
+            }
         }
         this.thumbnailReference.visible.link(({to}) => this.reference_visible.checked = to)
         this.thumbnailReference.opacity.link(({to}) => this.reference_opacity.value = to.toString())

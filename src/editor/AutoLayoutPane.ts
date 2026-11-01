@@ -1,7 +1,7 @@
 import { WamNode, WebAudioModule } from "@webaudiomodules/api"
 import { GroupPanelPartInitParameters, IContentRenderer } from "dockview-core"
 import { MOValue, OValue } from "../observable/collections/OValue.ts"
-import { ControlLibrary, WamGUIGenerator } from "../WamGUIGenerator.ts"
+import { ControlLibrary, WamGUICode, WamGUIGenerator } from "../WamGUIGenerator.ts"
 import { html } from "../utils/doc.ts"
 import { Color3 } from "@babylonjs/core"
 import { CSettingsValue, CSettingsValues } from "../control/controls/settings/settings.ts"
@@ -17,6 +17,7 @@ export class AutoLayoutPane implements IContentRenderer{
         private wam: OValue<WebAudioModule<WamNode>|null>,
         private url: OValue<string>,
         private library: ControlLibrary,
+        private readonly onApplyLayout: (code: WamGUICode) => Promise<void>,
         private controls: {
             parameter: {control:keyof ControlLibrary, values:CSettingsValues}[],
             input: {control:keyof ControlLibrary, values:CSettingsValues}[],
@@ -161,6 +162,8 @@ export class AutoLayoutPane implements IContentRenderer{
         const spacingInput = html.a`<input type="range" min="0.0" max="0.1" step="0.01" />` as HTMLInputElement
         
         const handleInput = html.a`<input type="range" min="0.0" max="0.5" step="0.05" />` as HTMLInputElement
+        const applyButton = html.a`<button type="button" disabled>Apply layout to editor</button>` as HTMLButtonElement
+        const status = html.a`<div role="status" aria-live="polite"></div>`
         
         const parameterInput = html.a`<select></select>` as HTMLSelectElement
         for(const it of this.controls.parameter) parameterInput.appendChild(html.a`<option ${it.control}>${it.control}</option>`)
@@ -173,6 +176,8 @@ export class AutoLayoutPane implements IContentRenderer{
 
         this.element.replaceChildren(
             viewer_pane,
+            applyButton,
+            status,
             html.a`
                 <div class="form_containe menu _vertical _inner">
                     <label>Spacing</label> ${spacingInput}
@@ -206,10 +211,14 @@ export class AutoLayoutPane implements IContentRenderer{
                     this.replace_value(completable, {color:layout.top_color})
                     const values = {...structuredClone(factory.getDefaultValues()), ...completable }
                     this.replace_value(values, {color:layout.top_color})
-                    this.builder.addControl({control,x,y,width,height,values})
+                    await this.builder.addControl({control,x,y,width,height,values})
                 }
+                applyButton.disabled = false
+                status.textContent = `${layout.parameters.length} generated controls ready to apply.`
             }catch(e){
                 console.error(e)
+                applyButton.disabled = true
+                status.textContent = "Unable to generate an auto layout. See the console for details."
             }
         }        
 
@@ -226,6 +235,20 @@ export class AutoLayoutPane implements IContentRenderer{
             this.input.observable.register(regenerate),
             this.output.observable.register(regenerate),
         ]
+
+        applyButton.onclick = () => {
+            if(!this.builder) return
+            const code = structuredClone(this.builder.save(this.library))
+            applyButton.disabled = true
+            void this.onApplyLayout(code).then(() => {
+                status.textContent = "Generated layout applied to the editor."
+            }).catch(error => {
+                console.error("Unable to apply generated layout", error)
+                status.textContent = "Unable to apply generated layout. See the console for details."
+            }).finally(() => {
+                applyButton.disabled = false
+            })
+        }
 
         regenerate()
 

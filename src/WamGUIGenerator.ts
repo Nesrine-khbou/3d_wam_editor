@@ -67,6 +67,7 @@ export class WamGUIGenerator{
     private descriptorSchemaVersion: 1 | 2 = 1
     private requiredFeatures: string[] = []
     private editorFeatures: string[] = []
+    private faceTransform?: WamGUICode["face_transform"]
     readonly pad_outline_width = this.pad_decoration.outline_width
     readonly pad_outline_color = this.pad_decoration.outline_color
     readonly modifier = this.pad_decoration.modifier
@@ -240,9 +241,32 @@ export class WamGUIGenerator{
                 throw new TypeError(`world_width requires the "${WAM_GUI_FEATURES.worldWidth}" feature declaration`)
             }
         }
+        if(code.face_transform !== undefined){
+            if(schemaVersion !== 2){
+                throw new TypeError("face_transform requires schema_version: 2")
+            }
+            if(!code.required_features?.includes(WAM_GUI_FEATURES.faceTransform)){
+                throw new TypeError(`face_transform requires the "${WAM_GUI_FEATURES.faceTransform}" feature declaration`)
+            }
+            if(typeof code.face_transform !== "object" || code.face_transform === null || Array.isArray(code.face_transform)){
+                throw new TypeError("face_transform must be an object")
+            }
+            for(const key of ["x", "y", "rotation_degrees", "scale"] as const){
+                const value = code.face_transform[key]
+                if(value !== undefined && (typeof value !== "number" || !Number.isFinite(value))){
+                    throw new TypeError(`face_transform.${key} must be a finite number`)
+                }
+            }
+            if(code.face_transform.scale !== undefined && code.face_transform.scale <= 0){
+                throw new RangeError("face_transform.scale must be greater than 0")
+            }
+        }
         this.descriptorSchemaVersion = schemaVersion
         this.requiredFeatures = [...(code.required_features ?? [])]
         this.editorFeatures = [...(code.editor_features ?? [])]
+        this.faceTransform = code.face_transform === undefined
+            ? undefined
+            : structuredClone(code.face_transform)
         this.aspect_ratio.value = code.aspect_ratio
         this.size.value = code.size ?? 1
         this.world_width.value = code.world_width ?? null
@@ -317,6 +341,9 @@ export class WamGUIGenerator{
                 WAM_GUI_FEATURES.worldWidth,
             ])]
         }
+        if(this.faceTransform !== undefined){
+            descriptor.face_transform = structuredClone(this.faceTransform)
+        }
         return descriptor
     }
 
@@ -353,6 +380,12 @@ export interface WamGUICode{
     world_width?: number,
     face?: string,
     face_color?: string,
+    face_transform?: {
+        x?: number,
+        y?: number,
+        rotation_degrees?: number,
+        scale?: number,
+    },
     shape?: string,
     outline_width?: number,
     outline_color?: string,

@@ -9,7 +9,7 @@ import { SettingsPane } from "./editor/SettingsPane.ts"
 import { ToolbarPane } from "./editor/ToolbarPane.ts"
 import { WamPadPane } from "./editor/WamPadPane.ts"
 import { LoadSavePane } from "./editor/LoadSavePane.ts"
-import { ControlLibrary } from "./WamGUIGenerator.ts"
+import { ControlLibrary, WamGUICode } from "./WamGUIGenerator.ts"
 import { MOValue } from "./observable/collections/OValue.ts"
 import { Item } from "./control/ControlMap.ts"
 import { ImagesPane } from "./editor/ImagesPane.ts"
@@ -26,6 +26,7 @@ import { DebugPane } from "./editor/DebugPane.ts"
 import { AudioTestPane } from "./editor/AudioTestPane.ts"
 import { WamThumbnailReference } from "./utils/thumbnail-reference.ts"
 import { DesignWorkspacePane } from "./editor/DesignWorkspacePane.ts"
+import { DocumentHistory, DocumentHistoryState, HistoryCommandRunner } from "./editor/DocumentHistory.ts"
 
 let audioContext: AudioContext
 let host: string
@@ -41,17 +42,75 @@ const wam_loader = new WamLoaderPane(host!!,audioContext!!)
 const thumbnail_reference = new WamThumbnailReference(wam_loader.wam, wam_loader.url)
 const view_3d = new WamGui3DPane()
 const editor = new WamEditorPane(wam_loader.wam, view_3d.container, thumbnail_reference)
+wam_loader.wam.observable.register(() => documentHistory.reset())
+let refreshHistoryButtons = (): void => {}
+let historyState: DocumentHistoryState = {
+    canUndo: false,
+    canRedo: false,
+    undoLabel: null,
+    redoLabel: null,
+}
+const documentHistory = new DocumentHistory<WamGUICode>(
+    () => editor.gui_generator.value.save(controls),
+    async snapshot => {
+        editor.selector.unselect_all()
+        await editor.gui_generator.value.load(structuredClone(snapshot), controls)
+        settings.settings.value = null
+    },
+    snapshot => structuredClone(snapshot),
+    100,
+    state => {
+        historyState = state
+        refreshHistoryButtons()
+    },
+)
+const runHistoryCommand: HistoryCommandRunner = (label, operation) =>
+    documentHistory.execute(label, operation)
+function executeDocumentCommand(label: string, operation: () => void | Promise<void>): void {
+    void runHistoryCommand(label, operation).catch(error => {
+        console.error(`Unable to ${label.toLowerCase()}`, error)
+    })
+}
 const selector = new ControlSelectorPane(controls,editor.gui_generator)
-const wampad = new WamPadPane(editor.gui_generator, thumbnail_reference)
+const wampad = new WamPadPane(editor.gui_generator, thumbnail_reference, runHistoryCommand)
 const workspace = new DesignWorkspacePane(editor, view_3d)
-const load_save = new LoadSavePane(editor.gui_generator, wam_loader.url, controls)
+const load_save = new LoadSavePane(editor.gui_generator, wam_loader.url, controls, runHistoryCommand)
 const images = new ImagesPane(DECORATION_IMAGES)
-const examples = new ExamplesPane(example_json as any, editor.gui_generator, wam_loader.url, controls)
-const autolayout = new AutoLayoutPane(wam_loader.wam, wam_loader.url, controls, control_categories)
+const examples = new ExamplesPane(
+    example_json as any,
+    editor.gui_generator,
+    wam_loader.url,
+    controls,
+    runHistoryCommand,
+)
+const autolayout = new AutoLayoutPane(
+    wam_loader.wam,
+    wam_loader.url,
+    controls,
+    code => runHistoryCommand("Apply auto layout", () => editor.gui_generator.value.load(code, controls)),
+    control_categories,
+)
 const test2d = new Test2DPane(editor.gui_generator)
 const keyboard = new OneWamPane(audioContext!!, host!!, "https://mainline.i3s.unice.fr/wam2/packages/VirtualMidiKeyboardNoSound/src/index.js", wam_loader.wam)
 const debug = new DebugPane(editor.gui_generator)
 const audioTest = new AudioTestPane(audioContext!!, wam_loader.wam)
+
+const beginDocumentEdit = (event: Event): void => {
+    const target = event.target
+    if(!(target instanceof HTMLElement)) return
+    if(target.matches("input, select, textarea")){
+        documentHistory.begin("Edit document settings")
+    }else if(target.closest(".control_container, .transformer")){
+        documentHistory.begin("Move or resize controls")
+    }
+}
+const finishDocumentEdit = (): void => documentHistory.commit()
+document.addEventListener("input", beginDocumentEdit, true)
+document.addEventListener("change", beginDocumentEdit, true)
+document.addEventListener("mousedown", beginDocumentEdit, true)
+document.addEventListener("change", finishDocumentEdit)
+window.addEventListener("mouseup", finishDocumentEdit)
+window.addEventListener("pointerup", finishDocumentEdit)
 
 /* Settings */
 const settings = new SettingsPane(()=>wam_loader.parameters_info)
@@ -194,23 +253,42 @@ async function duplicateSelecteds(){
 /* Editor Toolbar */
 const editor_toolbar = new ToolbarPane(
     {
+        id:"undo", icon:"↶", label:"Undo", description:"last document edit",
+        shortcut: [{key:"z",ctrl:true}],
+        disabled:true,
+        action:()=> {
+            void documentHistory.undo().catch(error => console.error("Unable to undo document edit", error))
+        }
+    },
+    {
+        id:"redo", icon:"↷", label:"Redo", description:"last undone document edit",
+        shortcut: [{key:"y",ctrl:true},{key:"z",ctrl:true,shift:true}],
+        disabled:true,
+        action:()=> {
+            void documentHistory.redo().catch(error => console.error("Unable to redo document edit", error))
+        }
+    },
+    "separator",
+    {
         id:"add", icon:"+", label:"Add Control", description: "from the palette",
         shortcut: [{key:"a",ctrl:true}],
         action: (index)=>{
             const gui = editor.gui_generator.value
             const control = selector.selected.value?.type; if(!control) return
-            gui.addControl({control, values:parameter_values, x:0, y:0, width:0.1, height:0.1})
+            executeDocumentCommand("Add control", () =>
+                gui.addControl({control, values:structuredClone(parameter_values), x:0, y:0, width:0.1, height:0.1}),
+            )
         }
     },
     {
         id:"remove", icon:"×", label:"Remove Controls", description: "selecteds",
         shortcut: [{key:"Delete"},{key:"Backspace"}],
-        action:removeSelecteds
+        action:()=>executeDocumentCommand("Delete controls", removeSelecteds)
     },
     {
         id:"replace", icon:"R", label:"Replace Controls", description: "selecteds by ones from the palette",
         shortcut: [{key:"r",ctrl:true}],
-        action:replaceSelecteds
+        action:()=>executeDocumentCommand("Replace controls", replaceSelecteds)
     },
     {
         id:"copy", icon:"⿻", label:"Copy Controls",  description: "selecteds to the clipboard",
@@ -223,30 +301,38 @@ const editor_toolbar = new ToolbarPane(
         id:"cut", icon:"✂", label:"Cut Controls",  description: "selecteds to the clipboard",
         shortcut: [{key:"x",ctrl:true}],
         action(){
-            copySelecteds()
-            removeSelecteds()
+            executeDocumentCommand("Cut controls", () => {
+                copySelecteds()
+                removeSelecteds()
+            })
         }
     },
     {
         id:"paste", icon:"📋︎", label:"Paste Controls",  description: "from the clipboard",
         shortcut: [{key:"v",ctrl:true}],
-        action:()=>{ void pasteSelecteds() }
+        action:()=>executeDocumentCommand("Paste controls", pasteSelecteds)
     },
     {
         id:"duplicate", icon:"⧉", label:"Duplicate Controls", description:"selected controls with a small offset",
         shortcut: [{key:"d",ctrl:true}],
-        action:()=>{ void duplicateSelecteds() }
+        action:()=>executeDocumentCommand("Duplicate controls", duplicateSelecteds)
     },
     "separator",
     {
         id:"rearrange_x", icon:"┉", label:"Realign horizontally", description:"selecteds",
-        action(){ rearrage("x","y","width","height")}
+        action(){ executeDocumentCommand("Align controls horizontally", () => rearrage("x","y","width","height"))}
     },
     {
         id:"rearrange_y", icon:"┋", label:"Realign vertically", description:"selecteds",
-        action(){ rearrage("y","x","height","width")}
+        action(){ executeDocumentCommand("Align controls vertically", () => rearrage("y","x","height","width"))}
     }
 )
+
+refreshHistoryButtons = () => {
+    editor_toolbar.setDisabled("undo", !historyState.canUndo)
+    editor_toolbar.setDisabled("redo", !historyState.canRedo)
+}
+refreshHistoryButtons()
 
 selector.selected.link(({to:selected})=>{
     editor_toolbar.setDisabled("add", selected==null)
