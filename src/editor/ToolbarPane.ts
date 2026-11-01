@@ -1,5 +1,6 @@
-import { DockviewPanelApi, GroupPanelPartInitParameters, IContentRenderer } from "dockview-core"
+import { GroupPanelPartInitParameters, IContentRenderer } from "dockview-core"
 import { html } from "../utils/doc.ts"
+import { isEditableShortcutTarget, matchesShortcutModifiers } from "../gui/editorInteractions.ts"
 
 export type ToolbarItem = 
     {
@@ -22,7 +23,8 @@ export class ToolbarPane implements IContentRenderer{
 
     element = html.a`<ul class="toolbar"></ul>` as HTMLUListElement
 
-    private button_elements = {} as Record<string,HTMLElement>
+    private button_elements = {} as Record<string,HTMLButtonElement>
+    private status_element = html.a`<li class="toolbar-status" aria-live="polite"></li>`
 
     private buttons: Record<string,{ctrl?: boolean, shift?: boolean, alt?: boolean, id:string, action:(index:string)=>void}> = {}
 
@@ -47,19 +49,21 @@ export class ToolbarPane implements IContentRenderer{
                     })
                     .join(" or ")
                 const button = html.a`
-                    <button class=tooltip_holder>
-                        ${icon}
+                    <button type="button" class="tooltip_holder" aria-label="${label}" title="${label}">
+                        <span class="toolbar-icon" aria-hidden="true">${icon}</span>
+                        <span class="toolbar-label">${label}</span>
                         <div class="-tooltip">
                             ${label}
                             <span class="-shortcut">${shortcuts}</span>
                             <span class="-description">${description??""}</span>
                         </div>
                     </button>
-                `
+                ` as HTMLButtonElement
                 const li = html.a`<li>${button}</li>`
                 li.classList.toggle("_disabled",!!disabled)
+                button.disabled = !!disabled
                 button.addEventListener("click",()=>action(id))
-                this.button_elements[id]=li
+                this.button_elements[id]=button
                 this.element.appendChild(li)
             }
             i++
@@ -69,31 +73,38 @@ export class ToolbarPane implements IContentRenderer{
         i=0
         for(const {action,shortcut,id} of items.filter(it=>typeof it == "object" && "action" in it)){
             for(let {key,alt,ctrl,shift} of shortcut??[]){
-                this.buttons[key] = {ctrl,alt,shift,action,id}
+                this.buttons[this.normalizeKey(key)] = {ctrl,alt,shift,action,id}
             }
             i++
         }
+        this.element.append(this.status_element)
     }
 
     setDisabled(id:string, isDisabled:boolean){
-        this.button_elements[id].classList.toggle("_disabled",isDisabled)
+        const button = this.button_elements[id]
+        button.disabled = isDisabled
+        button.parentElement?.classList.toggle("_disabled",isDisabled)
+    }
+
+    setStatus(message: string): void {
+        this.status_element.textContent = message
+    }
+
+    private normalizeKey(key: string): string {
+        return key.length === 1 ? key.toLowerCase() : key
     }
 
     on_input = (event: KeyboardEvent)=>{
-        if(document.activeElement instanceof HTMLInputElement) return
-        if(document.activeElement instanceof HTMLTextAreaElement) return
-        if(document.activeElement instanceof HTMLSelectElement) return
+        if(event.defaultPrevented || event.repeat) return
+        if(isEditableShortcutTarget(event.target) || isEditableShortcutTarget(document.activeElement)) return
 
-        const binding = this.buttons[event.key]
+        const binding = this.buttons[this.normalizeKey(event.key)]
         if(!binding)return
 
         const {action,id,alt,ctrl,shift} = binding
 
-        if(this.button_elements[id].classList.contains("_disabled")) return
-
-        if(ctrl && !event.ctrlKey) return
-        if(shift && !event.shiftKey) return
-        if(alt && !event.altKey) return
+        if(this.button_elements[id].disabled) return
+        if(!matchesShortcutModifiers({ctrl,shift,alt}, event)) return
 
         action(id)
 

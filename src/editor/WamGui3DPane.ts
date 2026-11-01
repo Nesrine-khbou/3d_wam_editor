@@ -9,6 +9,7 @@ export class WamGui3DPane implements IContentRenderer{
     container: TransformNode
     engine: Engine
     scene: Scene
+    private renderLoopStarted = false
     declare key_handler: (e:KeyboardEvent)=>void
 
     constructor(){
@@ -18,8 +19,10 @@ export class WamGui3DPane implements IContentRenderer{
         canvas.classList.add("container")
         canvas.style.cssText = `
             display: flex;
-            aspect-ratio: 1/1;
             width: 100%;
+            height: 100%;
+            min-width: 0;
+            min-height: 0;
         `
         
         let ctx= canvas.getContext("webgl2");
@@ -37,6 +40,12 @@ export class WamGui3DPane implements IContentRenderer{
     }
 
     init(_: GroupPanelPartInitParameters): void {
+        this.startRenderLoop()
+    }
+
+    startRenderLoop(): void {
+        if(this.renderLoopStarted) return
+        this.renderLoopStarted = true
         //this.key_handler = (event)=>{
         //    switch(event.key){
         //        case "z": this.container.position.x+=0.1; break
@@ -53,6 +62,7 @@ export class WamGui3DPane implements IContentRenderer{
     dispose(): void {
         document.removeEventListener("keypress", this.key_handler)
         this.engine.stopRenderLoop()
+        this.renderLoopStarted = false
     }
 
 }

@@ -1,4 +1,10 @@
 import { html } from "../utils/doc.js";
+import {
+    GridSnapSettings,
+    SnapSource,
+    snapCoordinate,
+    snapRectPosition,
+} from "./editorInteractions.ts";
 
 function to_css(v: number) { return (Math.round(v*10000)/100)+"%" }
 
@@ -14,10 +20,13 @@ export class Transformer {
     private _height: number
     readonly element: HTMLElement
     private isPrecise = false
+    onSnapFeedback: (source: SnapSource) => void = () => {}
 
     onmove: (x:number,y:number,width:number,height:number)=>void = ()=>{}
 
-    constructor(){
+    constructor(
+        private readonly getSnapSettings: () => GridSnapSettings = () => ({ enabled: false, spacing: 0.05 }),
+    ){
         this.element = html.a`
             <div class="transformer">
                 <div class="corner _1"></div>
@@ -193,55 +202,41 @@ export class Transformer {
             yBar.classList.add("_hidden")
 
             const {horizontal, vertical} = lines()
+            const snapSources: SnapSource[] = []
 
             if(left){
-                let pos = oLeft+offset_x
-                for(const l of horizontal){
-                    if(!this.isPrecise && Math.abs(pos-l)<0.01){
-                        pos = l
-                        xBar.classList.remove("_hidden")
-                        xBar.style.left = "0%"
-                        break
-                    }
-                }
-                this.left = pos
+                const snapped = snapCoordinate(
+                    oLeft + offset_x, horizontal, this.getSnapSettings(), e.altKey, this.isPrecise,
+                )
+                this.showAlignmentGuide(xBar, snapped.source, "0%")
+                snapSources.push(snapped.source)
+                this.left = snapped.value
             }
             if(right){
-                let pos = oRight+offset_x
-                for(const l of horizontal){
-                    if(!this.isPrecise && Math.abs(pos-l)<0.01){
-                        pos = l
-                        xBar.classList.remove("_hidden")
-                        xBar.style.left = "100%"
-                        break
-                    }
-                }
-                this.right = pos
+                const snapped = snapCoordinate(
+                    oRight + offset_x, horizontal, this.getSnapSettings(), e.altKey, this.isPrecise,
+                )
+                this.showAlignmentGuide(xBar, snapped.source, "100%")
+                snapSources.push(snapped.source)
+                this.right = snapped.value
             }
             if(top){
-                let pos = oTop+offset_y
-                for(const l of vertical){
-                    if(!this.isPrecise && Math.abs(pos-l)<0.01){
-                        pos = l
-                        yBar.classList.remove("_hidden")
-                        yBar.style.top = "0%"
-                        break
-                    }
-                }
-                this.top = pos
+                const snapped = snapCoordinate(
+                    oTop + offset_y, vertical, this.getSnapSettings(), e.altKey, this.isPrecise,
+                )
+                this.showAlignmentGuide(yBar, snapped.source, "0%")
+                snapSources.push(snapped.source)
+                this.top = snapped.value
             }
             if(bottom){
-                let pos = oBottom+offset_y
-                for(const l of vertical){
-                    if(!this.isPrecise && Math.abs(pos-l)<0.01){
-                        pos = l
-                        yBar.classList.remove("_hidden")
-                        yBar.style.top = "100%"
-                        break
-                    }
-                }
-                this.bottom = pos
+                const snapped = snapCoordinate(
+                    oBottom + offset_y, vertical, this.getSnapSettings(), e.altKey, this.isPrecise,
+                )
+                this.showAlignmentGuide(yBar, snapped.source, "100%")
+                snapSources.push(snapped.source)
+                this.bottom = snapped.value
             }
+            this.reportSnapFeedback(snapSources, e.altKey)
         }
 
         let ondrop = ()=>{
@@ -275,50 +270,20 @@ export class Transformer {
             xBar.classList.add("_hidden")
             yBar.classList.add("_hidden")
 
-            let posX = oX + (e.pageX-startMousePageX)/bounds.width*this.width
-            let posY = oY + (e.pageY-startMousePageY)/bounds.height*this.height
+            const posX = oX + (e.pageX-startMousePageX)/bounds.width*this.width
+            const posY = oY + (e.pageY-startMousePageY)/bounds.height*this.height
 
             const {horizontal, vertical} = lines()
-
-            for(const l of horizontal){
-                if(!this.isPrecise && Math.abs(posX-l)<0.01){
-                    posX = l
-                    xBar.classList.remove("_hidden")
-                    xBar.style.left = "0%"
-                    break
-                }
-            }
-
-            for(const l of horizontal){
-                if(!this.isPrecise && Math.abs(posX+this.width-l)<0.01){
-                    posX = l-this.width
-                    xBar.classList.remove("_hidden")
-                    xBar.style.left = "100%"
-                    break
-                }
-            }
-
-            for(const l of vertical){
-                if(!this.isPrecise && Math.abs(posY-l)<0.01){
-                    posY = l
-                    yBar.classList.remove("_hidden")
-                    yBar.style.top = "0%"
-                    break
-                }
-            }
-
-            for(const l of vertical){
-                if(!this.isPrecise && Math.abs(posY+this.height-l)<0.01){
-                    posY = l-this.height
-                    yBar.classList.remove("_hidden")
-                    yBar.style.top = "100%"
-                    break
-                }
-            }
-
-            this.x = posX
-            this.y = posY
+            const settings = this.getSnapSettings()
+            const snappedX = snapRectPosition(posX, this.width, horizontal, settings, e.altKey, this.isPrecise)
+            const snappedY = snapRectPosition(posY, this.height, vertical, settings, e.altKey, this.isPrecise)
+            this.showAlignmentGuide(xBar, snappedX.source, snappedX.edge === "end" ? "100%" : "0%")
+            this.showAlignmentGuide(yBar, snappedY.source, snappedY.edge === "end" ? "100%" : "0%")
+            this.reportSnapFeedback([snappedX.source, snappedY.source], e.altKey)
+            this.x = snappedX.value
+            this.y = snappedY.value
         }
+
         window.addEventListener("mousemove", fn)
 
         let ondrop = ()=>{
@@ -328,6 +293,25 @@ export class Transformer {
         }
         window.addEventListener("mouseup", ondrop)
         window.addEventListener("mousemove", fn)
+    }
+
+    private showAlignmentGuide(element: HTMLElement, source: SnapSource, position: string): void {
+        if(source !== "alignment") return
+        element.classList.remove("_hidden")
+        if(element.classList.contains("_x")) element.style.left = position
+        else element.style.top = position
+    }
+
+    private reportSnapFeedback(sources: SnapSource[], override: boolean): void {
+        if(override){
+            this.onSnapFeedback("override")
+            return
+        }
+        this.onSnapFeedback(
+            sources.includes("alignment") ? "alignment"
+                : sources.includes("grid") ? "grid"
+                    : "none",
+        )
     }
     
 

@@ -7,6 +7,7 @@ import { Color3 } from "@babylonjs/core"
 import { CSettingsValue, CSettingsValues } from "../control/controls/settings/settings.ts"
 import { linkInput } from "../observable/input_observable.ts"
 import { DEFAULT_CONTROL_CONTEXT_TARGET } from "../control/Control.ts"
+import { loadThumbnailReference } from "../utils/thumbnail-reference.ts"
 
 export class AutoLayoutPane implements IContentRenderer{
 
@@ -68,22 +69,9 @@ export class AutoLayoutPane implements IContentRenderer{
     private async autoLayout(){
         const wam = this.wam.value 
 
-        // Get the thumbnail URL
-        const thumbnail = (()=>{
-            const small_url = wam?.descriptor?.thumbnail
-            if(!small_url) return null
-            return new URL(small_url, this.url.value).href
-        })()
-
-        // Get the thumbnail image
-        let image: HTMLImageElement|null = null
-        if(thumbnail){
-            image = new Image()
-            image.crossOrigin = "anonymous"
-            const promise = new Promise(resolve=>image!!.onload=resolve)
-            image.src = thumbnail ?? ""
-            await promise
-        }
+        const reference = await loadThumbnailReference(wam?.descriptor?.thumbnail, this.url.value)
+        const image = reference?.image ?? null
+        const thumbnail = reference?.url ?? null
 
         // Get the aspect ratio of the WAM from the thumbnail
         let ratio = 1
@@ -92,8 +80,8 @@ export class AutoLayoutPane implements IContentRenderer{
         let size = 1
         let spacing = this.spacing.value
         let handle = this.handle.value
-        if(image){
-            ratio = image.naturalWidth/image.naturalHeight
+        if(reference){
+            ratio = reference.aspectRatio
             if(ratio<1){
                 pad_width = ratio
                 pad_height = 1

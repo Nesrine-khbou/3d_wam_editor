@@ -6,6 +6,7 @@ import { ControlEnv, ControlFactory, ControlHost, ControlType } from "./control/
 import { Decoration } from "./utils/visual/Decoration.ts";
 import { CSettingsValues } from "./control/controls/settings/settings.ts";
 import { ShareMap } from "./control/ShareMap.ts";
+import { WAM_GUI_FEATURES } from "./descriptor/WamGuiDescriptor.ts";
 
 // @ts-ignore
 window.WAMExtensions ??= {}
@@ -17,6 +18,23 @@ export interface ControlLibrary{
 export type WamPadShape = "rectangle"
     | "circle"
     | "triangle"
+
+class LogicalWorldWidthValue extends MOValue<number|null>{
+    override set(value: number|null): void{
+        if(value !== null && (!Number.isFinite(value) || value <= 0)){
+            throw new RangeError("world_width must be finite and greater than 0")
+        }
+        super.set(value)
+    }
+
+    override get value(): number|null{
+        return super.value
+    }
+
+    override set value(value: number|null){
+        this.set(value)
+    }
+}
 
 /**
  * Allow to generated a 3d wam gui from a WamGUICode.
@@ -45,6 +63,10 @@ export class WamGUIGenerator{
     readonly front_face = this.pad_decoration.front_face
     readonly size = new MOValue(.8)
     readonly aspect_ratio = new MOValue(1)
+    readonly world_width = new LogicalWorldWidthValue(null)
+    private descriptorSchemaVersion: 1 | 2 = 1
+    private requiredFeatures: string[] = []
+    private editorFeatures: string[] = []
     readonly pad_outline_width = this.pad_decoration.outline_width
     readonly pad_outline_color = this.pad_decoration.outline_color
     readonly modifier = this.pad_decoration.modifier
@@ -72,16 +94,13 @@ export class WamGUIGenerator{
             this.disposables.push(visual.dispose)
 
             const updateSize = ()=>{
-                const aspect_ratio = this.aspect_ratio.value
-                const size = this.size.value
-                let [width,height] = aspect_ratio>1 ? [1,1/aspect_ratio] : [aspect_ratio,1]
-                width*=size
-                height*=size
+                const { width, height } = this.getBodyWorldDimensions()
                 pad_node.scaling.set(width,0.1,height)
             }
 
             this.size.observable.add(updateSize)
             this.aspect_ratio.observable.add(updateSize)
+            this.world_width.observable.add(updateSize)
             updateSize()
         }
 
@@ -115,6 +134,15 @@ export class WamGUIGenerator{
 
         //// CONTROLS ////
         this.controls = new ControlMap(this.host.html?.root, this.host.babylonjs?.root)
+        const updateControlDimensions = () => {
+            const dimensions = this.world_width.value === null
+                ? null
+                : this.getBodyWorldDimensions()
+            this.controls.setWorldDimensions(dimensions)
+        }
+        this.aspect_ratio.observable.add(updateControlDimensions)
+        this.world_width.observable.add(updateControlDimensions)
+        updateControlDimensions()
 
     }
 
@@ -168,13 +196,56 @@ export class WamGUIGenerator{
     }
 
     /**
+     * Return the body's dimensions in the generator's Babylon.js coordinate system.
+     * Legacy descriptors retain their existing size-derived dimensions.
+     */
+    getBodyWorldDimensions(): { width: number; height: number } {
+        const worldWidth = this.world_width.value
+        const aspectRatio = this.aspect_ratio.value
+        if(worldWidth !== null){
+            if(!Number.isFinite(worldWidth) || worldWidth <= 0){
+                throw new RangeError("world_width must be finite and greater than 0")
+            }
+            if(!Number.isFinite(aspectRatio) || aspectRatio <= 0){
+                throw new RangeError("aspect_ratio must be finite and greater than 0 when world_width is set")
+            }
+            return { width: worldWidth, height: worldWidth / aspectRatio }
+        }
+
+        const [width, height] = aspectRatio > 1 ? [1, 1 / aspectRatio] : [aspectRatio, 1]
+        return { width: width * this.size.value, height: height * this.size.value }
+    }
+
+    /**
      * Load the 3DWam GUI descriptor.
      * @param code the 3DWam GUI descriptor
      * @param library The control library to use for loading the controls
      */
     async load(code: WamGUICode, library: ControlLibrary){
+        const schemaVersion = code.schema_version ?? 1
+        if(schemaVersion !== 1 && schemaVersion !== 2){
+            throw new RangeError(`Unsupported WAM GUI schema_version "${schemaVersion}"`)
+        }
+        if(code.world_width !== undefined){
+            if(schemaVersion !== 2){
+                throw new TypeError("world_width requires schema_version: 2")
+            }
+            if(typeof code.world_width !== "number" || !Number.isFinite(code.world_width) || code.world_width <= 0){
+                throw new RangeError("world_width must be finite and greater than 0")
+            }
+            if(typeof code.aspect_ratio !== "number" || !Number.isFinite(code.aspect_ratio) || code.aspect_ratio <= 0){
+                throw new RangeError("aspect_ratio must be finite and greater than 0 when world_width is set")
+            }
+            if(!code.required_features?.includes(WAM_GUI_FEATURES.worldWidth)){
+                throw new TypeError(`world_width requires the "${WAM_GUI_FEATURES.worldWidth}" feature declaration`)
+            }
+        }
+        this.descriptorSchemaVersion = schemaVersion
+        this.requiredFeatures = [...(code.required_features ?? [])]
+        this.editorFeatures = [...(code.editor_features ?? [])]
         this.aspect_ratio.value = code.aspect_ratio
         this.size.value = code.size ?? 1
+        this.world_width.value = code.world_width ?? null
         this.pad_shape.value = code.shape as WamPadShape ?? "rectangle"
         this.top_color.value = code.top_color
         this.bottom_color.value = code.bottom_color
@@ -213,7 +284,7 @@ export class WamGUIGenerator{
      * @returns the 3DWam GUI descriptor
      */
     save(library: ControlLibrary): WamGUICode{
-        return {
+        const descriptor: WamGUICode = {
             aspect_ratio: this.aspect_ratio.value,
             size: this.size.value,
             bottom_color: this.bottom_color.value,
@@ -233,6 +304,20 @@ export class WamGUIGenerator{
                 else return null
             }).filter(it=>it!=null)
         }
+        if(this.descriptorSchemaVersion === 2 || this.world_width.value !== null){
+            descriptor.schema_version = 2
+            descriptor.required_features = [...this.requiredFeatures]
+            descriptor.editor_features = [...this.editorFeatures]
+        }
+        if(this.world_width.value !== null){
+            descriptor.schema_version = 2
+            descriptor.world_width = this.world_width.value
+            descriptor.required_features = [...new Set([
+                ...this.requiredFeatures,
+                WAM_GUI_FEATURES.worldWidth,
+            ])]
+        }
+        return descriptor
     }
 
     /**
@@ -262,6 +347,10 @@ export interface WamGUICode{
     bottom_color: string,
     aspect_ratio: number,
     size: number,
+    schema_version?: 1 | 2,
+    required_features?: string[],
+    editor_features?: string[],
+    world_width?: number,
     face?: string,
     face_color?: string,
     shape?: string,

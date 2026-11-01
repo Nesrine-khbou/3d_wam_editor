@@ -24,6 +24,8 @@ import { MenuBar, MenuBarConfig, menubarViewport } from "./editor/MenuBar.ts"
 import { OneWamPane } from "./editor/OneWamPane.ts"
 import { DebugPane } from "./editor/DebugPane.ts"
 import { AudioTestPane } from "./editor/AudioTestPane.ts"
+import { WamThumbnailReference } from "./utils/thumbnail-reference.ts"
+import { DesignWorkspacePane } from "./editor/DesignWorkspacePane.ts"
 
 let audioContext: AudioContext
 let host: string
@@ -36,10 +38,12 @@ try{
 }
 
 const wam_loader = new WamLoaderPane(host!!,audioContext!!)
+const thumbnail_reference = new WamThumbnailReference(wam_loader.wam, wam_loader.url)
 const view_3d = new WamGui3DPane()
-const editor = new WamEditorPane(wam_loader.wam, view_3d.container)
+const editor = new WamEditorPane(wam_loader.wam, view_3d.container, thumbnail_reference)
 const selector = new ControlSelectorPane(controls,editor.gui_generator)
-const wampad = new WamPadPane(editor.gui_generator, wam_loader.wam, wam_loader.url)
+const wampad = new WamPadPane(editor.gui_generator, thumbnail_reference)
+const workspace = new DesignWorkspacePane(editor, view_3d)
 const load_save = new LoadSavePane(editor.gui_generator, wam_loader.url, controls)
 const images = new ImagesPane(DECORATION_IMAGES)
 const examples = new ExamplesPane(example_json as any, editor.gui_generator, wam_loader.url, controls)
@@ -164,13 +168,13 @@ function copySelecteds(){
         }))
 }
 
-function pasteSelecteds(){
+async function pasteSelecteds(){
     const controls = editor.gui_generator.value.controls
     let first = controls.length
     let count = clipboard.value.length
     editor.selector.selecteds = []
     for(const {x,y,width,height,values,control} of clipboard.value){
-        editor.gui_generator.value.addControl({
+        await editor.gui_generator.value.addControl({
             x,y,width,height,control,
             values: structuredClone(values)
         })
@@ -178,6 +182,12 @@ function pasteSelecteds(){
     editor.selector.selecteds = [...controls.values]
         .slice(first,first+count)
         .map(infos=>({element:infos.container!!, infos}))
+}
+
+async function duplicateSelecteds(){
+        if(editor.selector.selecteds.size === 0) return
+        copySelecteds()
+        await pasteSelecteds()
 }
 
 
@@ -194,7 +204,7 @@ const editor_toolbar = new ToolbarPane(
     },
     {
         id:"remove", icon:"×", label:"Remove Controls", description: "selecteds",
-        shortcut: [{key:"Delete"},{key:"Backspace"},{key:"x",ctrl:true}],
+        shortcut: [{key:"Delete"},{key:"Backspace"}],
         action:removeSelecteds
     },
     {
@@ -220,9 +230,12 @@ const editor_toolbar = new ToolbarPane(
     {
         id:"paste", icon:"📋︎", label:"Paste Controls",  description: "from the clipboard",
         shortcut: [{key:"v",ctrl:true}],
-        action(){
-            pasteSelecteds()
-        }
+        action:()=>{ void pasteSelecteds() }
+    },
+    {
+        id:"duplicate", icon:"⧉", label:"Duplicate Controls", description:"selected controls with a small offset",
+        shortcut: [{key:"d",ctrl:true}],
+        action:()=>{ void duplicateSelecteds() }
     },
     "separator",
     {
@@ -243,9 +256,13 @@ selector.selected.link(({to:selected})=>{
 
 function updateSelectionTargetButton(){
     const isDisabled = editor.selector.selecteds.size==0
+    editor_toolbar.setStatus(
+        `${editor.selectionCount} selected · Drag controls to move; drag corner handles to resize`,
+    )
     editor_toolbar.setDisabled("remove",isDisabled)
     editor_toolbar.setDisabled("cut",isDisabled)
     editor_toolbar.setDisabled("copy",isDisabled)
+    editor_toolbar.setDisabled("duplicate",isDisabled)
     editor_toolbar.setDisabled("replace", selector.selected.value==null || editor.selector.selecteds.size==0)
 
     const isDisabledMultitarget = editor.selector.selecteds.size<2
@@ -261,7 +278,7 @@ clipboard.link(({to})=>{
 })
 
 const components: Record<string,IContentRenderer> = {
-    wam_loader, editor, view_3d, selector,
+    wam_loader, workspace, selector,
     settings, editor_toolbar, wampad, load_save,
     images, examples: examples, autolayout, test2d,
     keyboard, debug, audioTest,
@@ -283,10 +300,34 @@ const api = createDockview(container, options)
 /* */
 
 
-const default_layout = {"grid":{"root":{"type":"branch","data":[{"type":"branch","data":[{"type":"leaf","data":{"views":["selector"],"activeView":"selector","id":"left"},"size":386},{"type":"leaf","data":{"views":["settings","images","examples"],"activeView":"settings","id":"1"},"size":385.20001220703125}],"size":384},{"type":"branch","data":[{"type":"leaf","data":{"views":["editor_toolbar"],"activeView":"editor_toolbar","id":"center"},"size":100},{"type":"leaf","data":{"views":["editor"],"activeView":"editor","id":"2"},"size":671.2000122070312}],"size":689},{"type":"branch","data":[{"type":"branch","data":[{"type":"leaf","data":{"views":["wam"],"activeView":"wam","id":"right"},"size":254},{"type":"leaf","data":{"views":["wampad","load_save"],"activeView":"wampad","id":"4"},"size":209}],"size":386},{"type":"leaf","data":{"views":["3d","autolayout"],"activeView":"3d","id":"3"},"size":385.20001220703125}],"size":463}],"size":771.2000122070312},"width":1536,"height":771.2000122070312,"orientation":"HORIZONTAL"},"panels":{"selector":{"id":"selector","contentComponent":"selector","title":"Controls"},"editor_toolbar":{"id":"editor_toolbar","contentComponent":"editor_toolbar","title":"Editor Toolbar","maximumHeight":50},"wam":{"id":"wam","contentComponent":"wam_loader","title":"Web Audio Module"},"settings":{"id":"settings","contentComponent":"settings","title":"Settings"},"images":{"id":"images","contentComponent":"images","title":"Images"},"examples":{"id":"examples","contentComponent":"examples","title":"Examples"},"editor":{"id":"editor","contentComponent":"editor","title":"Editor"},"3d":{"id":"3d","contentComponent":"view_3d","title":"3D View"},"autolayout":{"id":"autolayout","contentComponent":"autolayout","title":"Auto Layout"},"wampad":{"id":"wampad","contentComponent":"wampad","title":"Pad"},"load_save":{"id":"load_save","contentComponent":"load_save","title":"Load/Save"}},"activeGroup":"center"}
-api.fromJSON(default_layout as any)
+const default_layout = {"grid":{"root":{"type":"branch","data":[{"type":"branch","data":[{"type":"leaf","data":{"views":["selector"],"activeView":"selector","id":"left"},"size":386},{"type":"leaf","data":{"views":["settings","images","examples"],"activeView":"settings","id":"1"},"size":385.20001220703125}],"size":384},{"type":"branch","data":[{"type":"leaf","data":{"views":["editor_toolbar"],"activeView":"editor_toolbar","id":"center"},"size":100},{"type":"leaf","data":{"views":["workspace"],"activeView":"workspace","id":"2"},"size":671.2000122070312}],"size":689},{"type":"branch","data":[{"type":"branch","data":[{"type":"leaf","data":{"views":["wam"],"activeView":"wam","id":"right"},"size":254},{"type":"leaf","data":{"views":["wampad","load_save"],"activeView":"wampad","id":"4"},"size":209}],"size":386},{"type":"leaf","data":{"views":["autolayout"],"activeView":"autolayout","id":"3"},"size":385.20001220703125}],"size":463}],"size":771.2000122070312},"width":1536,"height":771.2000122070312,"orientation":"HORIZONTAL"},"panels":{"selector":{"id":"selector","contentComponent":"selector","title":"Controls"},"editor_toolbar":{"id":"editor_toolbar","contentComponent":"editor_toolbar","title":"Editor Toolbar","maximumHeight":50},"wam":{"id":"wam","contentComponent":"wam_loader","title":"Web Audio Module"},"settings":{"id":"settings","contentComponent":"settings","title":"Settings"},"images":{"id":"images","contentComponent":"images","title":"Images"},"examples":{"id":"examples","contentComponent":"examples","title":"Examples"},"workspace":{"id":"workspace","contentComponent":"workspace","title":"2D / 3D Workspace"},"autolayout":{"id":"autolayout","contentComponent":"autolayout","title":"Auto Layout"},"wampad":{"id":"wampad","contentComponent":"wampad","title":"Pad"},"load_save":{"id":"load_save","contentComponent":"load_save","title":"Load/Save"}},"activeGroup":"center"}
+const layoutStorageKey = "wam3dgenerator-dockview-layout-v1"
+let savedLayout: unknown = null
+try {
+    const storedLayout = localStorage.getItem(layoutStorageKey)
+    if(storedLayout) savedLayout = JSON.parse(storedLayout)
+} catch(error) {
+    console.error("Unable to restore the saved editor layout; using the default layout", error)
+}
+if(savedLayout){
+    try {
+        api.fromJSON(savedLayout as any)
+    } catch(error) {
+        console.error("The saved editor layout is invalid; using the default layout", error)
+        api.fromJSON(default_layout as any)
+    }
+}else{
+    api.fromJSON(default_layout as any)
+}
+api.onDidLayoutChange(() => {
+    try {
+        localStorage.setItem(layoutStorageKey, JSON.stringify(api.toJSON()))
+    } catch(error) {
+        console.error("Unable to save the editor layout", error)
+    }
+})
 const menu_config = {} as MenuBarConfig
-menubarViewport(menu_config, api, Object.keys(components), default_layout)
+menubarViewport(menu_config, api, Object.keys(components).filter(id => id !== "workspace"), default_layout)
 document.getElementById("menubar")!!.replaceWith(new MenuBar(menu_config).element)
 
 document.addEventListener("keypress", event=>{

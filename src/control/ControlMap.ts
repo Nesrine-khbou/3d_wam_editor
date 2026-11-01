@@ -20,6 +20,7 @@ export interface Item{
 export class ControlMap{
 
     private controls: Item[] =  []
+    private worldDimensions: { width: number; height: number } | null = null
 
     readonly on_add = new OSource<Item>() 
 
@@ -55,8 +56,7 @@ export class ControlMap{
                 node = control.createNode(this.node_container.getScene())
                 node.parent=this.node_container
                 node.setPivotPoint(new Vector3(-.5,-.5,.5))
-                node.scaling.set(width,Math.min(width,height),height)
-                node.position.set(x,.545,-y)
+                this.updateNodeGeometry(node, { x, y, width, height })
             }
 
             control.setDefaultValues()
@@ -88,6 +88,27 @@ export class ControlMap{
         return this.controls[index]
     }
 
+    setWorldDimensions(dimensions: { width: number; height: number } | null): void {
+        this.worldDimensions = dimensions
+        for(const item of this.controls){
+            if(item.node) this.updateNodeGeometry(item.node, item)
+        }
+    }
+
+    private updateNodeGeometry(node: TransformNode, item: Pick<Item, "x" | "y" | "width" | "height">): void {
+        if(this.worldDimensions === null){
+            node.scaling.set(item.width,Math.min(item.width,item.height),item.height)
+            node.position.set(item.x,.545,-item.y)
+            return
+        }
+
+        const { width: worldWidth, height: worldHeight } = this.worldDimensions
+        const controlWidth = item.width * worldWidth
+        const controlHeight = item.height * worldHeight
+        node.scaling.set(controlWidth,Math.min(controlWidth,controlHeight),controlHeight)
+        node.position.set(item.x * worldWidth,.545,-item.y * worldHeight)
+    }
+
     /** Move a control to a new position */
     move(index: number, x: number, y: number){
         let control_info = this.controls[index]
@@ -98,7 +119,7 @@ export class ControlMap{
             control_info.container.style.top = `${y*100}%`
         }
         if(control_info.node){
-            control_info.node.position.set(x,.545,-y)
+            this.updateNodeGeometry(control_info.node, control_info)
         }
     }
 
@@ -112,7 +133,7 @@ export class ControlMap{
             control_info.container.style.height = `${height*100}%`
         }
         if(control_info.node){
-            control_info.node.scaling.set(width,Math.min(width,height),height)
+            this.updateNodeGeometry(control_info.node, control_info)
         }
     }
 

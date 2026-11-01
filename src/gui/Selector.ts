@@ -1,4 +1,5 @@
 import { Transformer } from "./Transformer.ts"
+import { GridSnapSettings, SnapSource, transformGroupGeometry } from "./editorInteractions.ts"
 
 
 /**
@@ -18,6 +19,8 @@ export class Selector<T>{
         private get_position: (value:T)=>{x:number,y:number,width:number,height:number},
         private container: HTMLElement,
         private lines: (selected:T[])=>{horizontal:number[],vertical:number[]} = ()=>({horizontal:[],vertical:[]}),
+        private readonly getSnapSettings: () => GridSnapSettings = () => ({ enabled: false, spacing: 0.05 }),
+        private readonly onSnapFeedback: (source: SnapSource) => void = () => {},
     ) { }
 
     /** The selected elements. */
@@ -84,7 +87,8 @@ export class Selector<T>{
                 if(y+height>bottom) bottom = y+height
             }
             if(!this.transformer){
-                this.transformer = new Transformer()
+                this.transformer = new Transformer(this.getSnapSettings)
+                this.transformer.onSnapFeedback = this.onSnapFeedback
                 this.transformer.registerEvents(()=>this.lines([...this.selecteds.values()]))
                 this.container.appendChild(this.transformer.element)
             }
@@ -102,18 +106,17 @@ export class Selector<T>{
             this.transformer.bottom = bottom
 
             /* Get the element relative positions */
-            let relative_positions = []
-            for(const selected of this.selecteds){
-                const {x,y,width,height} = this.get_position(selected)
-                relative_positions.push({ x:(x-left)/(right-left), y:(y-top)/(bottom-top), width: width/(right-left), height: height/(bottom-top) })
-            }
+            const selecteds = [...this.selecteds]
+            const relativePositions = transformGroupGeometry(
+                selecteds.map(selected => this.get_position(selected)),
+                { x: left, y: top, width: right - left, height: bottom - top },
+            )
 
             /* On move */
             this.transformer.onmove = (gx,gy,gw,gh)=>{
-                const selecteds= [...this.selecteds]
                 for(let i=0; i<selecteds.length; i++){
                     const selected = selecteds[i]
-                    const pos = relative_positions[i]
+                    const pos = relativePositions[i]
                     this.on_move(
                         selected,
                         pos.x * gw + gx,

@@ -1,0 +1,111 @@
+# Project Handoff
+
+This is the persistent handoff log for feature work in this project. Read it before starting a feature and update the relevant entry when work progresses. Keep previous feature entries so future sessions retain decisions and context.
+
+## Project Context
+
+- **Working directory:** `C:\Users\LENOVO\Desktop\neeeees\M1\ds4h\3d_wam_editor`
+- **Project:** Wam 3D Editor, a browser-based TypeScript editor for designing Web Audio Module interfaces with synchronized HTML and Babylon.js 3D views.
+- **Existing behavior:** The README describes editing 3D WAM controls and pad appearance, automatic layout, JSON export, and audio/MIDI routing and testing. See `README.md` and `EDITOR_V2_SPECIFICATION.md` for project and design context.
+- **Specification status:** `EDITOR_V2_SPECIFICATION.md` contains the V2 proposal and compatibility contract. Descriptor normalization and V2 logical-width rendering are implemented; design-reference descriptor persistence, texture-transform rendering, other V2 runtime features, and the external WAM Jam Party adapter integration remain future work.
+
+## Feature Log
+
+#### Feature: V2 legacy example inventory
+
+- **Status:** Verified
+- **Goal:** Inventory every current `src/examples.json` entry for the V2 compatibility test plan.
+- **Progress:** Audited all 42 examples and 356 controls; recorded widget counts, every target binding, descriptor fields, optional body settings, observed widget value keys, and schema/geometry checks. Added local cloned fixtures, generator load/save/reload and model-preservation tests, consumer-facing library contract tests, and a Babylon.js rendering/scale baseline.
+- **Relevant files:** `src/examples.json` (source corpus); `src/WamGUIGenerator.ts` (`WamGUICode`, load/save, and scale behavior); `src/control/controls.ts` (registered control types); `src/control/ControlMap.ts` (normalized-to-renderer mapping); `src/control/ControlStateManager.ts` (consumer state API); `test/LEGACY_EXAMPLES_INVENTORY.md` (full inventory); `test/fixtures/legacy-examples.mjs` (network-free descriptor loader); `test/fixtures/mock-control-library.mjs` (test-only mock widgets); `test/legacy-example-compatibility.test.mjs` (compatibility suite); `test/LEGACY_RENDERING_BASELINE.md` (captured baseline).
+- **Decisions and constraints:** Keep the inventory separate from test implementation; do not treat external WAM or image URLs as deterministic test dependencies. `3d_joystick_control` and `jauge` are registered but absent from the bundled examples. Consumer contract tests exercise this repository's public API rather than the companion app adapter, which is not in this checkout.
+- **Validation:** Parsed and schema-checked all 42 examples/356 controls. `npm test` passed (46 tests, 0 failures), including save/reload round-trips and NullEngine scaling; `npm run build` passed. `npm test`'s Vite declaration plugin reports existing TS4094 diagnostics in `AnalyzerFieldValue.ts`, `ParameterFieldValue.ts`, and `ProgramFieldValue.ts` while the library build completes successfully.
+- **Known pitfalls:** Target spelling and case vary by WAM; target strings recur across examples, and `portamentoMode` is bound twice in Synth 101. The inventory records source strings as-is.
+- **Next step at completion:** Proceed to Task 2.1.
+- **Task 1 complete (1.1–1.5):** `loadLegacyExampleDescriptor(name)` and `loadAllLegacyExampleDescriptors()` return cloned descriptor data without `wam_url`. Automated tests cover load/save/model preservation for every example, the exported consumer API including control state management and disposal, and headless Babylon.js pad/control scaling. `test/LEGACY_RENDERING_BASELINE.md` records the values to protect. Tests do not execute the external companion application adapter or fetch remote assets.
+
+#### Feature: V2 descriptor field proposal
+
+- **Status:** Verified
+- **Goal:** Specify the optional descriptor field names and semantics for design-reference metadata, absolute logical width, and front-face texture transforms.
+- **Progress:** Added the Task 2.1 proposal to `EDITOR_V2_SPECIFICATION.md`: `design_reference`, `world_width`, and `face_transform`, with a JSON example, units/coordinate conventions, and separation of editor-only reference data from runtime texture/rendering data.
+- **Relevant files:** `EDITOR_V2_SPECIFICATION.md` (new section 6 and renumbered following sections).
+- **Decisions and constraints:** Keep all proposed fields optional and additive. `world_width` is measured in shared 3D logical units, not physical units; `face_transform` applies scale, rotation, then translation around the image center; `design_reference` is editor-only and must not become the exported body texture. Task 2.2–2.5 additionally defines versioned feature identifiers in place of a numeric minimum package version because the consumer dependency is GitHub-pinned and the package manifest/lockfile versions disagree.
+- **Validation:** Task 2.1 was documentation-only. The combined Task 2.1–2.5 work was subsequently validated with `npm test` (52 passed, 0 failed), `npm run build` (passed), and `git diff --check` (passed).
+- **Known pitfalls:** The helper validates and normalizes descriptor compatibility; only the V2 logical-width field is currently integrated into generator rendering. Other V2 render features remain follow-up work. WAM Jam Party is external to this checkout; its adapter must update its dependency deliberately and run its own integration tests.
+- **Next step at completion:** Continue with Task 2.2–2.5 compatibility rules and tests.
+
+#### Feature: V2 descriptor compatibility contract
+
+- **Status:** Verified
+- **Goal:** Define and implement safe, additive V2 descriptor compatibility while retaining legacy descriptor behavior.
+- **Progress:** Specified version-1 defaults and V2 `schema_version`, required-runtime/editor feature IDs, stable widget feature IDs, defaults for partial `design_reference`/`face_transform` objects, legacy `world_width` behavior, validation and migration rules, and the WAM Jam Party consumer boundary. Added and publicly exported descriptor validation/normalization and serialization helpers. Added deterministic tests for defaults, feature declarations, unknown optional-data retention, unsupported feature reporting/rejection, and invalid metadata.
+- **Relevant files:** `EDITOR_V2_SPECIFICATION.md` (sections 6–8 and Tasks 2.1–2.5); `src/descriptor/WamGuiDescriptor.ts` (compatibility API); `src/index.ts` (public exports); `test/v2-descriptor-contract.test.mjs` (contract tests); `package.json` (`npm test`).
+- **Decisions and constraints:** Missing `schema_version` means legacy v1 and legacy size behavior is preserved. V2 fields require version 2 and their declared feature IDs. Consumers compare feature IDs exactly; unknown required runtime features fail, while unsupported editor-only features are separately reported. The helper does not implement V2 rendering, image loading, or generator scaling.
+- **Validation:** `npm test` passed (52 tests, 0 failures); `npm run build` passed; `git diff --check` passed. The library declaration step continues to print existing TS4094 diagnostics from three unrelated control-value files while bundling succeeds.
+- **Known pitfalls:** The package version in `package.json` is `0.0.11` while the root lockfile says `0.0.2`; do not treat package semver as a compatibility guarantee. This checkout cannot test the external WAM Jam Party adapter or claim its V2 runtime support.
+- **Next step at completion:** Proceed to Task 3.1; validate V2 runtime features in WAM Jam Party before advertising them as supported.
+
+#### Feature: WAM thumbnail design-reference workflow
+
+- **Status:** Verified
+- **Goal:** Use a WAM thumbnail as a 2D design guide, expose its dimensions and ratio, and keep it separate from the exported body texture unless the user explicitly copies it.
+- **Progress:** Added a shared thumbnail-reference loader/state model, URL resolution against an optional descriptor URL or module URL, natural-dimension and ratio reporting, and explicit image/CORS errors. Added a 2D-only contain-fit overlay with visibility and opacity controls, use-reference-ratio and 1:1 reset actions, and a deliberate "Use reference as body texture" action. Auto-layout now uses the same loader and URL handling.
+- **Relevant files:** `src/utils/thumbnail-reference.ts` (URL/image loader and observable state); `src/editor/WamEditorPane.ts` (2D overlay); `src/editor/WamPadPane.ts` (status and workflow controls); `src/editor/AutoLayoutPane.ts` (shared loader); `src/editor2.ts` (shared model wiring); `src/index.ts` (public helper exports); `test/thumbnail-reference.test.mjs` (deterministic tests); `EDITOR_V2_SPECIFICATION.md` (Task 3 contract).
+- **Decisions and constraints:** Relative thumbnails use the provided descriptor URL when supplied, otherwise the WAM module URL. Images are loaded with anonymous CORS so canvas color sampling can be used safely; failures are reported rather than silently hanging. Overlay visibility and opacity are editor-session settings and are not serialized yet. Loading the reference never changes the body texture; the user must choose the explicit copy action. Reset aspect ratio means 1:1.
+- **Validation:** `npm test` passed (58 tests, 0 failures); `npm run build` passed; `git diff --check` passed. Tests use synthetic images and make no network requests. The library declaration step continues to print existing TS4094 diagnostics from unrelated control-value files.
+- **Known pitfalls:** WAM Jam Party and browser-level CORS behavior were not integration-tested. The overlay and Pad controls require interactive browser verification; source thumbnail data only exists after a WAM instance has loaded.
+- **Next step at completion:** Proceed to Task 4.1; WAM Jam Party integration remains an external consumer task.
+
+#### Feature: V2 logical body width
+
+- **Status:** Verified
+- **Goal:** Let a descriptor define a Babylon.js body width independently of aspect ratio and legacy `size`, while keeping normalized 2D control geometry unchanged.
+- **Progress:** Defined one logical unit as one Babylon.js coordinate unit before consumer root transforms; added an opt-in width checkbox, number input, and slider. `getBodyWorldDimensions()` exposes exact body dimensions. The generator sizes the pad from `world_width` and ratio, while `ControlMap` scales normalized 3D control positions and dimensions proportionally. Loading/saving preserves optional V2 metadata and writes the required world-width feature declaration. Absent width preserves legacy behavior.
+- **Relevant files:** `src/WamGUIGenerator.ts` (width model, validation, dimensions API, descriptor load/save); `src/control/ControlMap.ts` (normalized-to-world geometry); `src/editor/WamPadPane.ts` (width controls); `test/legacy-example-compatibility.test.mjs` (legacy and V2 NullEngine tests); `test/LEGACY_RENDERING_BASELINE.md` (documented coordinate expectations); `EDITOR_V2_SPECIFICATION.md` (Task 4 contract).
+- **Decisions and constraints:** Width is an X-axis dimension; body height is width/aspect ratio; existing 0.1 depth is unchanged. The editor slider starts at 0.01–10 and expands for larger values; the positive numeric value is not capped at 10. Legacy `size` remains in descriptors and continues to control legacy rendering and the HTML editor composition; it is not multiplied into an explicit V2 width. `calculateAverageControlSize()` remains a normalized statistic.
+- **Validation:** `npm test` passed (60 tests, 0 failures); `npm run build` passed; `git diff --check` passed. NullEngine tests cover legacy parity, ratio/width independence, control move/resize scaling, normalized geometry, save/reload and invalid metadata. Existing Vite declaration diagnostics (TS4094) in unrelated files remain. The external WAM Jam Party adapter is not in this checkout and was not integration-tested.
+- **Known pitfalls:** A consumer adopting V2 width must use `getBodyWorldDimensions()` once and avoid applying `calculateAverageControlSize()` or descriptor `size` as a second multiplier. The chosen logical coordinate unit is not a physical measurement; a consuming app may apply one uniform outer scene transform.
+- **Next step:** Task 6.1 — add independent grid visibility and snap enable/disable controls.
+
+#### Feature: Combined workspace and selection
+
+- **Status:** Verified
+- **Goal:** Keep the 2D editor and 3D preview visible in one maximizable workspace and improve selection and editing actions.
+- **Progress:** Replaced the separate editor/preview Dockview panels with a combined workspace and a 20–80% draggable, keyboard-adjustable divider. The split and full Dockview layout persist in versioned local-storage keys; malformed saved layouts are reported and fall back to the default. Added rectangle marquee selection, Shift-add and Ctrl/Cmd-toggle selection, a live selection count, normalized shared group transforms, labeled/disabled toolbar actions, a duplicate action, and exact-modifier shortcuts guarded from editable elements. Removed the Ctrl+X remove/cut collision.
+- **Relevant files:** `src/editor/DesignWorkspacePane.ts` (combined pane, splitter, maximize/restore, split persistence); `src/editor2.ts` (Dockview layout migration, persistence, toolbar actions and status); `src/editor/WamEditorPane.ts` (marquee and click selection); `src/editor/WamGui3DPane.ts` (idempotent preview render loop and responsive canvas); `src/editor/ToolbarPane.ts` (accessible action buttons and shortcut guards); `src/gui/editorInteractions.ts` and `src/gui/Selector.ts` (selection and group geometry helpers); `media/style/editor2.css` (workspace and toolbar styles); `test/editor-interactions.test.mjs` (interaction helper tests); `EDITOR_V2_SPECIFICATION.md` (Task 5 contract).
+- **Decisions and constraints:** Shift adds to selection; Ctrl/Cmd toggles selection; unmodified marquee replaces it. The splitter is clamped to 20–80% and uses local storage independently of Dockview's layout. Saved Dockview state uses a versioned key and invalid state falls back with a console error. Browser-level resizing, pointer interaction, and maximize/restore have not been manually verified.
+- **Validation:** `npm run build` passed. `npm test` passed (66 tests, 0 failures). A browser smoke check verified the workspace/divider render, dragged the split from 50% to 71%, and maximized/restored the panel. `git diff --check` passed. The Vite declaration plugin continues to print TS4094 diagnostics from unrelated control-value files while bundling and tests complete successfully.
+- **Known pitfalls:** The external WAM Jam Party adapter remains outside this checkout. Complete broader manual checks for keyboard accessibility, small screens and browser-specific pointer behavior before release.
+- **Next step:** Task 6.1 — add independent grid visibility and snap enable/disable controls.
+
+#### Feature: Normalized design grid and snapping
+
+- **Status:** Verified
+- **Goal:** Add an adjustable normalized grid and predictable snapping for moving/resizing individual controls and groups without changing the prior default editing behavior.
+- **Progress:** Added independent grid-visibility and grid-snap toggles, an adjustable 1–50% spacing input (default 5%), and a design-area overlay. Enabled snapping applies to resize edges and group/control bounds. The closest existing alignment guide within the normalized 1% threshold takes precedence over grid snapping; otherwise the nearest grid line wins. Alt temporarily overrides both sources, while Ctrl keeps the existing alignment-guide precision override. Status text identifies alignment, grid snap, no snap, and the active Alt override. Grid settings persist across reloads using a versioned local-storage key.
+- **Relevant files:** `src/gui/editorInteractions.ts` (normalized deterministic snap functions and priorities); `src/gui/Transformer.ts` (move/resize snapping and alignment feedback); `src/gui/Selector.ts` (injects live grid settings into group transforms); `src/editor/WamEditorPane.ts` (grid overlay geometry and settings); `src/editor/DesignWorkspacePane.ts` (grid/snap controls, persistence and feedback); `media/style/editor2.css` (grid and control styling); `test/editor-interactions.test.mjs` (snap, bounds, viewport-size and grouped-geometry tests); `EDITOR_V2_SPECIFICATION.md` (Task 6 contract).
+- **Decisions and constraints:** Grid and snap both default off to preserve the pre-Task-6 behavior; alignment guides remain active when grid snapping is off. Spacing is a fraction of the normalized design area and does not depend on CSS pixels or Babylon.js zoom. An Alt-modified drag disables both grid and guide snapping; Ctrl disables guide snapping only. Malformed stored settings are reported and fall back to defaults.
+- **Validation:** `npm run build` passed; `npm test` passed (71 tests, 0 failures); `git diff --check` passed. Browser smoke testing verified the independent controls, visible overlay, 10% spacing persistence after reload and restoration of smoke-test settings.
+- **Known pitfalls:** The external WAM Jam Party adapter is not in this checkout. Broader manual verification of moving/resizing controls and keyboard modifiers across browsers remains advisable.
+- **Next step:** Task 7.1 — define document history representation, history boundaries and a practical history limit.
+
+### Feature entry template
+
+Copy this section for each new feature. Keep the feature name stable when updating it in later sessions.
+
+#### Feature: {feature name}
+
+- **Status:** Planned / In progress / Implemented / Verified
+- **Goal:** {What the feature should do and why}
+- **Progress:** {What is complete and what remains}
+- **Relevant files:** {Paths and concise descriptions}
+- **Decisions and constraints:** {Important choices, rationale, and ruled-out alternatives}
+- **Validation:** {Commands or checks run and their results; say "not run" when applicable}
+- **Known pitfalls:** {Relevant failures, constraints, or caveats}
+- **Next step:** {A concrete action, or "None" when complete}
+
+## Handoff Maintenance
+
+- Preserve existing entries; update the same feature entry when continuing work.
+- Record only observed changes and completed validation. Keep plans and unverified work clearly labeled.
+- Include concrete paths, decisions, blockers, and an actionable next step so another session can continue without relying on chat history.
