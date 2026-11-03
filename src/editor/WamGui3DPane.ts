@@ -7,6 +7,7 @@ export class WamGui3DPane implements IContentRenderer{
     
     element = html.a`<div class="center_pane _contain"></div>`
     container: TransformNode
+    readonly camera: ArcRotateCamera
     engine: Engine
     scene: Scene
     private renderLoopStarted = false
@@ -31,12 +32,26 @@ export class WamGui3DPane implements IContentRenderer{
         this.scene.createDefaultLight();
         this.scene.clearColor = new Color4(0,0,0,0)
     
-        const camera = new ArcRotateCamera("camera", -Math.PI/2, 0, 1.7, new Vector3(0,0,0), this.scene);
-        camera.wheelPrecision = 100
-        camera.attachControl()
-        camera.setTarget(Vector3.Zero())
+        this.camera = new ArcRotateCamera("camera", -Math.PI/2, 0, 1.7, new Vector3(0,0,0), this.scene);
+        this.camera.wheelPrecision = 100
+        this.camera.lowerRadiusLimit = 0.25
+        this.camera.upperRadiusLimit = 20
+        this.camera.attachControl()
+        this.camera.setTarget(Vector3.Zero())
     
         this.container = new TransformNode("node_container", this.scene)
+    }
+
+    zoomIn(): void {
+        this.camera.radius = Math.max(this.camera.lowerRadiusLimit ?? 0.25, this.camera.radius / 1.2)
+    }
+
+    zoomOut(): void {
+        this.camera.radius = Math.min(this.camera.upperRadiusLimit ?? 20, this.camera.radius * 1.2)
+    }
+
+    resetZoom(): void {
+        this.camera.radius = 1.7
     }
 
     init(_: GroupPanelPartInitParameters): void {

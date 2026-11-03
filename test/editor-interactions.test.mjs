@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 const {
     clampWorkspaceSplit,
+    clampWorkspaceZoom,
     isEditableShortcutTarget,
     matchesShortcutModifiers,
     rectanglesIntersect,
@@ -17,6 +18,13 @@ test("workspace split is finite and clamped to the supported range", () => {
     assert.equal(clampWorkspaceSplit(0.05), 0.2);
     assert.equal(clampWorkspaceSplit(0.95), 0.8);
     assert.equal(clampWorkspaceSplit(Number.NaN), 0.5);
+});
+
+test("2D workspace zoom is finite and clamped to the supported range", () => {
+    assert.equal(clampWorkspaceZoom(1.5), 1.5);
+    assert.equal(clampWorkspaceZoom(0.1), 0.5);
+    assert.equal(clampWorkspaceZoom(4), 3);
+    assert.equal(clampWorkspaceZoom(Number.NaN), 1);
 });
 
 test("marquee intersection handles overlap, containment, and separation", () => {

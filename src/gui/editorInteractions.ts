@@ -31,6 +31,11 @@ export function clampWorkspaceSplit(value: number, minimum = 0.2, maximum = 0.8)
     return Math.max(minimum, Math.min(maximum, value))
 }
 
+export function clampWorkspaceZoom(value: number): number {
+    if(!Number.isFinite(value)) return 1
+    return Math.max(0.5, Math.min(3, value))
+}
+
 export function snapCoordinate(
     value: number,
     guides: readonly number[],

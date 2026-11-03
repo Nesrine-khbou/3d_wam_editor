@@ -1,11 +1,12 @@
 import { DockviewPanelApi, GroupPanelPartInitParameters, IContentRenderer } from "dockview-core"
 import { html } from "../utils/doc.ts"
-import { clampWorkspaceSplit } from "../gui/editorInteractions.ts"
+import { clampWorkspaceSplit, clampWorkspaceZoom } from "../gui/editorInteractions.ts"
 import { WamEditorPane } from "./WamEditorPane.ts"
 import { WamGui3DPane } from "./WamGui3DPane.ts"
 
 const SPLIT_STORAGE_KEY = "wam3dgenerator-workspace-split-v1"
 const GRID_SETTINGS_STORAGE_KEY = "wam3dgenerator-grid-snap-v1"
+const WORKSPACE_ZOOM_STEP = 0.1
 
 export class DesignWorkspacePane implements IContentRenderer {
     readonly element = html.a`<div class="design-workspace"></div>`
@@ -19,32 +20,64 @@ export class DesignWorkspacePane implements IContentRenderer {
     private readonly maximizeButton = html.a`<button type="button" class="design-workspace__maximize"></button>` as HTMLButtonElement
     private readonly toolbar = html.a`<div class="design-workspace__toolbar"></div>`
     private readonly gridToggle = html.a`<input type="checkbox" aria-label="Show design grid">` as HTMLInputElement
-    private readonly snapToggle = html.a`<input type="checkbox" aria-label="Enable grid snapping">` as HTMLInputElement
+    private readonly snapToggle = html.a`<input type="checkbox" aria-label="Snap controls to grid">` as HTMLInputElement
     private readonly spacingInput = html.a`
         <input type="number" min="1" max="50" step="1" value="5" aria-label="Grid spacing percentage">
     ` as HTMLInputElement
     private readonly snapFeedback = html.a`<output class="design-workspace__snap-feedback" aria-live="polite"></output>`
     private readonly gridControls = html.a`<div class="design-workspace__grid-controls"></div>`
+    private readonly editorZoomControls = html.a`<div class="design-workspace__zoom-controls design-workspace__zoom-controls--2d" aria-label="2D editor zoom controls"></div>`
+    private readonly previewZoomControls = html.a`<div class="design-workspace__zoom-controls design-workspace__zoom-controls--3d" aria-label="3D preview zoom controls"></div>`
+    private readonly editorZoomOut = html.a`<button type="button" aria-label="Zoom out 2D editor" title="Zoom out">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5M7.5 10.8h6.6"></path></svg>
+    </button>` as HTMLButtonElement
+    private readonly editorZoomIn = html.a`<button type="button" aria-label="Zoom in 2D editor" title="Zoom in">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5M7.5 10.8h6.6M10.8 7.5v6.6"></path></svg>
+    </button>` as HTMLButtonElement
+    private readonly editorZoomReset = html.a`<button type="button" aria-label="Reset 2D editor zoom">Reset</button>` as HTMLButtonElement
+    private readonly editorZoomLabel = html.a`<output aria-label="2D editor zoom">100%</output>`
+    private readonly previewZoomOut = html.a`<button type="button" aria-label="Zoom out 3D preview" title="Zoom out">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5M7.5 10.8h6.6"></path></svg>
+    </button>` as HTMLButtonElement
+    private readonly previewZoomIn = html.a`<button type="button" aria-label="Zoom in 3D preview" title="Zoom in">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5M7.5 10.8h6.6M10.8 7.5v6.6"></path></svg>
+    </button>` as HTMLButtonElement
+    private readonly previewZoomReset = html.a`<button type="button" aria-label="Reset 3D preview zoom">Reset</button>` as HTMLButtonElement
     private panelApi: DockviewPanelApi | null = null
     private split = 0.5
+    private editorZoom = 1
     private removeResizeObserver: (() => void) | null = null
     private dragging = false
+    private readonly zoomPreviewOut = (): void => this.preview.zoomOut()
+    private readonly zoomPreviewIn = (): void => this.preview.zoomIn()
+    private readonly resetPreviewZoom = (): void => this.preview.resetZoom()
 
     constructor(
         private readonly editor: WamEditorPane,
         private readonly preview: WamGui3DPane,
     ) {
         this.gridControls.append(
-            html.a`<label class="design-workspace__grid-option">Grid ${this.gridToggle}</label>`,
-            html.a`<label class="design-workspace__grid-option">Snap ${this.snapToggle}</label>`,
+            html.a`<label class="design-workspace__grid-option" title="Show or hide guide lines; this does not enable snapping">Grid ${this.gridToggle}</label>`,
+            html.a`<label class="design-workspace__grid-option" title="Automatically align control edges to the grid while moving or resizing">Snap controls ${this.snapToggle}</label>`,
             html.a`<label class="design-workspace__grid-option">Spacing ${this.spacingInput}<span>%</span></label>`,
             this.snapFeedback,
+        )
+        this.editorZoomControls.append(
+            this.editorZoomOut,
+            this.editorZoomLabel,
+            this.editorZoomIn,
+            this.editorZoomReset,
+        )
+        this.previewZoomControls.append(
+            this.previewZoomOut,
+            this.previewZoomIn,
+            this.previewZoomReset,
         )
         this.toolbar.append(this.gridControls, this.maximizeButton)
         this.element.append(this.toolbar, this.content)
         this.content.append(this.editorRegion, this.divider, this.previewRegion)
-        this.editorRegion.append(this.editor.element)
-        this.previewRegion.append(this.preview.element)
+        this.editorRegion.append(this.editorZoomControls, this.editor.element)
+        this.previewRegion.append(this.previewZoomControls, this.preview.element)
         this.element.style.cssText = "display:grid;grid-template-rows:auto minmax(0,1fr);height:100%;min-height:0"
         this.content.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) 8px minmax(0,1fr);min-height:0;min-width:0"
         this.editor.element.style.width = "100%"
@@ -53,8 +86,15 @@ export class DesignWorkspacePane implements IContentRenderer {
         this.preview.element.style.height = "100%"
         this.applySplit(this.readStoredSplit())
         this.applyGridSettings(this.readStoredGridSettings())
+        this.setEditorZoom(1)
 
         this.maximizeButton.addEventListener("click", this.toggleMaximized)
+        this.editorZoomOut.addEventListener("click", this.zoomEditorOut)
+        this.editorZoomIn.addEventListener("click", this.zoomEditorIn)
+        this.editorZoomReset.addEventListener("click", this.resetEditorZoom)
+        this.previewZoomOut.addEventListener("click", this.zoomPreviewOut)
+        this.previewZoomIn.addEventListener("click", this.zoomPreviewIn)
+        this.previewZoomReset.addEventListener("click", this.resetPreviewZoom)
         this.gridToggle.addEventListener("change", this.onGridSettingsChange)
         this.snapToggle.addEventListener("change", this.onGridSettingsChange)
         this.spacingInput.addEventListener("change", this.onGridSettingsChange)
@@ -133,9 +173,23 @@ export class DesignWorkspacePane implements IContentRenderer {
     private updateSnapSummary(): void {
         const settings = this.editor.getGridSettings()
         const state = settings.snapEnabled
-            ? `Grid snap on (${Math.round(settings.spacing * 100)}%); alignment guides take priority`
-            : "Grid snap off; alignment guides remain active"
-        this.snapFeedback.textContent = `${state}. Hold Alt to override snapping; Ctrl bypasses alignment guides.`
+            ? `Snap on (${Math.round(settings.spacing * 100)}%): moved/resized edges align to grid; nearby control guides take priority.`
+            : "Snap off: the grid is visual only; control alignment guides still work."
+        this.snapFeedback.textContent = `${state} Hold Alt to move freely; Ctrl ignores alignment guides only.`
+    }
+
+    private zoomEditorIn = (): void => this.setEditorZoom(this.editorZoom + WORKSPACE_ZOOM_STEP)
+
+    private zoomEditorOut = (): void => this.setEditorZoom(this.editorZoom - WORKSPACE_ZOOM_STEP)
+
+    private resetEditorZoom = (): void => this.setEditorZoom(1)
+
+    private setEditorZoom(zoom: number): void {
+        this.editorZoom = Math.round(clampWorkspaceZoom(zoom) * 100) / 100
+        this.editor.setZoom(this.editorZoom)
+        this.editorZoomLabel.textContent = `${Math.round(this.editorZoom * 100)}%`
+        this.editorZoomOut.disabled = this.editorZoom <= 0.5
+        this.editorZoomIn.disabled = this.editorZoom >= 3
     }
 
     init(parameters: GroupPanelPartInitParameters): void {
@@ -223,6 +277,12 @@ export class DesignWorkspacePane implements IContentRenderer {
         this.removeResizeObserver?.()
         this.removeResizeObserver = null
         this.maximizeButton.removeEventListener("click", this.toggleMaximized)
+        this.editorZoomOut.removeEventListener("click", this.zoomEditorOut)
+        this.editorZoomIn.removeEventListener("click", this.zoomEditorIn)
+        this.editorZoomReset.removeEventListener("click", this.resetEditorZoom)
+        this.previewZoomOut.removeEventListener("click", this.zoomPreviewOut)
+        this.previewZoomIn.removeEventListener("click", this.zoomPreviewIn)
+        this.previewZoomReset.removeEventListener("click", this.resetPreviewZoom)
         this.gridToggle.removeEventListener("change", this.onGridSettingsChange)
         this.snapToggle.removeEventListener("change", this.onGridSettingsChange)
         this.spacingInput.removeEventListener("change", this.onGridSettingsChange)

@@ -12,6 +12,7 @@ import { WamThumbnailReference } from "../utils/thumbnail-reference.ts";
 import {
     GridSnapSettings,
     NormalizedRect,
+    clampWorkspaceZoom,
     rectanglesIntersect,
     shouldSelectInMarquee,
     SnapSource,
@@ -52,6 +53,8 @@ export class WamEditorPane implements IContentRenderer{
             width: 100%;
             overflow: hidden;
             position: relative;
+            transform: scale(1);
+            transform-origin: center center;
         `
         this.reference_overlay.style.cssText = `
             position: absolute;
@@ -209,6 +212,13 @@ export class WamEditorPane implements IContentRenderer{
         this.updateFaceTransformOverlay()
     }
 
+    setZoom(zoom: number): void {
+        const scale = clampWorkspaceZoom(zoom)
+        this.container.style.setProperty("--editor-zoom", scale.toString())
+        this.container.style.setProperty("--editor-zoom-inverse", (1 / scale).toString())
+        this.container.style.transform = `scale(${scale})`
+    }
+
     private getGridSnapSettings(): GridSnapSettings {
         return { enabled: this.gridSettings.snapEnabled, spacing: this.gridSettings.spacing }
     }
@@ -238,20 +248,20 @@ export class WamEditorPane implements IContentRenderer{
         )
         this.marqueeStart = { x, y, mode, originalSelection }
         this.marquee.style.display = "block"
-        this.updateMarquee(x, y, x, y, bounds)
+        this.updateMarquee(x, y, x, y)
         if(!additive) this.selector.unselect_all()
         event.preventDefault()
     }
 
-    private updateMarquee(x1: number, y1: number, x2: number, y2: number, bounds: DOMRect): NormalizedRect {
+    private updateMarquee(x1: number, y1: number, x2: number, y2: number): NormalizedRect {
         const x = Math.min(x1, x2)
         const y = Math.min(y1, y2)
         const width = Math.abs(x2 - x1)
         const height = Math.abs(y2 - y1)
-        this.marquee.style.left = `${x * bounds.width}px`
-        this.marquee.style.top = `${y * bounds.height}px`
-        this.marquee.style.width = `${width * bounds.width}px`
-        this.marquee.style.height = `${height * bounds.height}px`
+        this.marquee.style.left = `${x * this.container.clientWidth}px`
+        this.marquee.style.top = `${y * this.container.clientHeight}px`
+        this.marquee.style.width = `${width * this.container.clientWidth}px`
+        this.marquee.style.height = `${height * this.container.clientHeight}px`
         return { x, y, width, height }
     }
 
@@ -261,7 +271,7 @@ export class WamEditorPane implements IContentRenderer{
         if(bounds.width <= 0 || bounds.height <= 0) return
         const x = (event.clientX - bounds.left) / bounds.width
         const y = (event.clientY - bounds.top) / bounds.height
-        const marquee = this.updateMarquee(this.marqueeStart.x, this.marqueeStart.y, x, y, bounds)
+        const marquee = this.updateMarquee(this.marqueeStart.x, this.marqueeStart.y, x, y)
         for(const item of this.gui_generator.value.controls.values){
             if(!item.container) continue
             const control = { x: item.x, y: item.y, width: item.width, height: item.height }

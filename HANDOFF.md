@@ -89,6 +89,16 @@ This is the persistent handoff log for feature work in this project. Read it bef
 - **Known pitfalls:** The external WAM Jam Party adapter is not in this checkout. Broader manual verification of moving/resizing controls and keyboard modifiers across browsers remains advisable.
 - **Next step:** Task 7.1 — define document history representation, history boundaries and a practical history limit.
 
+#### Feature: Independent 2D and 3D workspace zoom
+
+- **Status:** Implemented
+- **Goal:** Let users zoom each side of the combined design workspace independently without changing the saved design.
+- **Progress:** Added separate magnifying-glass zoom-in/out icons in dedicated strips above the 2D and 3D panes, with reset actions; controls no longer overlay either canvas. The 2D view reports its zoom percentage and is bounded to 50%–300%; its selection handles counter-scale to remain a usable screen size. The 3D controls change camera distance while preserving mouse-wheel zoom. Both views start at their default zoom when the workspace is created. The grid/snap status now explains that grid is a visual guide while snapping aligns moved/resized edges.
+- **Relevant files:** `src/editor/DesignWorkspacePane.ts` (pane-local icon controls, 2D zoom range, grid/snap explanation); `src/editor/WamEditorPane.ts` (view-only 2D surface scaling and zoom-safe marquee/selection handles); `src/editor/WamGui3DPane.ts` (camera zoom and radius limits); `src/gui/editorInteractions.ts` (2D zoom clamp); `media/style/editor2.css` (zoom controls and handle styling); `test/editor-interactions.test.mjs` (zoom bound coverage); `EDITOR_V2_SPECIFICATION.md` (workspace behavior).
+- **Decisions and constraints:** Zoom is view-only and is not stored in the descriptor or persisted between workspace instances. The 2D normalized control positions remain unchanged. The 3D reset restores the default camera radius but does not reset camera rotation.
+- **Validation:** `npm test` passed (87 tests, 0 failures); `npm run build` passed; `git diff --check` passed. Browser checks exercised the 2D 300% upper bound, reset, zoom-out step, and the 3D zoom controls. Verify selection-handle visibility and 2D drag/resize/marquee at non-default zoom in a manual browser check.
+- **Known pitfalls:** Zooming in can crop the view edges because the workspace panes remain clipped to their available dimensions; reset or zoom out to see the full design. The 3D camera radius is constrained to avoid clipping through or losing the model.
+
 #### Feature: Editor document undo and redo
 
 - **Status:** Verified

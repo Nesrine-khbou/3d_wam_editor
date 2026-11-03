@@ -178,9 +178,10 @@ Provide a dedicated design workspace that can be maximized/full-screen and keeps
 - The 3D preview occupies a resizable dock/split pane; dragging the divider changes available width without changing project data.
 - Keep the shared generator/model as the single source of truth. Edits in 2D update 3D immediately, and serialized/imported data updates both.
 - Preserve the existing docked panels and allow restoring the prior layout.
-- Provide fit-to-view, zoom, and a clearly displayed design ratio/dimensions.
+- Provide independent zoom-in, zoom-out, and reset controls for the 2D and 3D views in dedicated strips above their respective panes, using recognizable zoom icons without obscuring either canvas, plus a clearly displayed design ratio/dimensions.
 
-This is a workspace/layout enhancement, not a second independent editor model.
+This is a workspace/layout enhancement, not a second independent editor model. The 2D zoom is bounded from 50% to 300% and must not change normalized control geometry; selection handles should remain a usable screen size at every zoom. 3D zoom adjusts camera distance, remains compatible with mouse-wheel zoom, and has a reset action.
+The 2D zoom is bounded from 50% to 300% and must not change normalized control geometry; 3D zoom adjusts camera distance, remains compatible with mouse-wheel zoom, and has a reset action.
 
 ### 5.2 Descriptor thumbnail as design reference and aspect-ratio source
 
@@ -456,7 +457,7 @@ Implement in numbered increments. Each subtask should be independently reviewabl
 
 ### 8.5 Task 5 — Improve editing workspace and selection
 
-- **5.1** Add a maximizable combined workspace with the 2D editor and 3D preview visible together. **Implemented:** the Dockview workspace hosts both views in one panel and maximizes/restores as one unit.
+- **5.1** Add a maximizable combined workspace with the 2D editor and 3D preview visible together. **Implemented:** the Dockview workspace hosts both views in one panel and maximizes/restores as one unit; independent 2D and 3D zoom controls were added, with reset actions and view-only scaling.
 - **5.2** Add a user-resizable divider and preserve/restore dock layout. **Implemented:** pointer dragging and arrow keys resize the split, constrained to 20–80%; the split and Dockview layout persist separately in versioned local-storage keys. Invalid saved layouts are reported and fall back to the default.
 - **5.3** Add marquee selection, explicit toggle/add selection, selection count and grouped transform handles. **Implemented:** background dragging selects intersecting controls; Shift adds to the selection; Ctrl/Cmd toggles intersecting controls; the toolbar reports the selection count and shared transform handles resize/move groups.
 - **5.4** Improve discoverability of delete, move, resize, copy, cut, paste, duplicate, replace and alignment actions. **Implemented:** toolbar controls have visible labels, accessible names, disabled states, and shortcuts; duplicate is explicit, shortcuts ignore editable targets and require exact modifiers, and remove no longer conflicts with cut.
@@ -522,6 +523,7 @@ Implement in numbered increments. Each subtask should be independently reviewabl
 - Changing the ratio changes the design rectangle; changing the absolute size changes 3D body and control dimensions but does not change normalized placement or ratio.
 - A 2D move/resize/settings change is visible in 3D immediately, and the exported descriptor reloads to the same layout in both runtime modes.
 - The design workspace can be maximized with both canvases visible and a draggable divider adjusts the preview allocation.
+- Independent icon-based 2D/3D zoom controls sit beside their respective views and change only the view; 2D control geometry and saved descriptor coordinates remain unchanged, selection handles stay usable when zoomed, and 3D mouse-wheel zoom continues to work.
 - Marquee/Shift selection, grid visibility, snap toggle/spacing, delete, copy/cut/paste, duplicate, move and undo/redo work with single and grouped controls.
 - One drag or slider gesture creates one undo step. Undo then redo restores the same control geometry, widget values and body/texture settings.
 - Texture position, rotation and scale can be entered precisely, previewed, saved and restored.
