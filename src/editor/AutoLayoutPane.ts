@@ -7,7 +7,7 @@ import { Color3 } from "@babylonjs/core"
 import { CSettingsValue, CSettingsValues } from "../control/controls/settings/settings.ts"
 import { linkInput } from "../observable/input_observable.ts"
 import { DEFAULT_CONTROL_CONTEXT_TARGET } from "../control/Control.ts"
-import { loadThumbnailReference } from "../utils/thumbnail-reference.ts"
+import { loadWamThumbnailReference } from "../utils/thumbnail-reference.ts"
 
 export class AutoLayoutPane implements IContentRenderer{
 
@@ -70,7 +70,10 @@ export class AutoLayoutPane implements IContentRenderer{
     private async autoLayout(){
         const wam = this.wam.value 
 
-        const reference = await loadThumbnailReference(wam?.descriptor?.thumbnail, this.url.value)
+        const reference = await loadWamThumbnailReference(
+            this.url.value,
+            wam?.descriptor?.thumbnail,
+        )
         const image = reference?.image ?? null
         const thumbnail = reference?.url ?? null
 

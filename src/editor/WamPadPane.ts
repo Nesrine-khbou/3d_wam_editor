@@ -5,6 +5,7 @@ import { WamGUIGenerator } from "../WamGUIGenerator.ts"
 import { DECORATION_SHAPE_MODIFIER, DECORATION_SHAPE_POINTS } from "../utils/visual/Decoration.ts"
 import { WamThumbnailReference } from "../utils/thumbnail-reference.ts"
 import { HistoryCommandRunner } from "./DocumentHistory.ts"
+import { DEFAULT_FACE_TRANSFORM, FaceTransform } from "../utils/visual/faceTransform.ts"
 
 export class WamPadPane implements IContentRenderer{
 
@@ -25,6 +26,17 @@ export class WamPadPane implements IContentRenderer{
     private bottom_color = html.a`<input type="color" value="#222222"/>` as HTMLInputElement
     private face_color = html.a`<input type="color" value="#ffffff"/>` as HTMLInputElement
     private front_face = html.a`<input type="text" value=""/>` as HTMLInputElement
+    private face_x = html.a`<input type="number" step="0.01"/>` as HTMLInputElement
+    private face_x_slider = html.a`<input type="range" min="-5" max="5" step="0.01"/>` as HTMLInputElement
+    private face_y = html.a`<input type="number" step="0.01"/>` as HTMLInputElement
+    private face_y_slider = html.a`<input type="range" min="-5" max="5" step="0.01"/>` as HTMLInputElement
+    private face_rotation = html.a`<input type="number" step="1"/>` as HTMLInputElement
+    private face_rotation_slider = html.a`<input type="range" min="-180" max="180" step="1"/>` as HTMLInputElement
+    private face_scale = html.a`<input type="number" min="0.001" step="0.01"/>` as HTMLInputElement
+    private face_scale_slider = html.a`<input type="range" min="0.1" max="3" step="0.01"/>` as HTMLInputElement
+    private reset_face_transform = html.a`<button type="button">Reset texture transform</button>` as HTMLButtonElement
+    private show_face_transform_overlay = html.a`<input type="checkbox"/>` as HTMLInputElement
+    private face_transform_status = html.a`<div role="status" aria-live="polite"></div>`
     private use_reference_texture = html.a`<button type="button">Use reference as body texture</button>` as HTMLButtonElement
     private use_reference_ratio = html.a`<button type="button">Use reference aspect ratio</button>` as HTMLButtonElement
     private reset_aspect_ratio = html.a`<button type="button">Reset aspect ratio to 1:1</button>` as HTMLButtonElement
@@ -49,6 +61,13 @@ export class WamPadPane implements IContentRenderer{
             <label>Pad Gradient</label> ${this.top_color} ${this.bottom_color}
             <label>Outline</label> ${this.outline_color} ${this.outline_width}
             <label>Front face image</label> ${this.front_face} ${this.face_color}
+            <label>Texture translation X</label> ${this.face_x} ${this.face_x_slider}
+            <label>Texture translation Y</label> ${this.face_y} ${this.face_y_slider}
+            <label>Texture rotation (clockwise degrees)</label> ${this.face_rotation} ${this.face_rotation_slider}
+            <label>Texture uniform scale</label> ${this.face_scale} ${this.face_scale_slider}
+            ${this.reset_face_transform}
+            <label>${this.show_face_transform_overlay} Show 2D transform overlay</label>
+            ${this.face_transform_status}
             <label>Design reference</label>
             <label>${this.reference_visible} Show 2D reference overlay</label>
             ${this.reference_opacity}
@@ -61,6 +80,8 @@ export class WamPadPane implements IContentRenderer{
         gui_generator: OValue<WamGUIGenerator>,
         private readonly thumbnailReference: WamThumbnailReference,
         private readonly runHistoryCommand: HistoryCommandRunner = async (_label, operation) => operation(),
+        private readonly historyTransaction?: {begin(label: string): void; commit(): void},
+        private readonly setFaceTransformOverlayVisible: (visible: boolean) => void = () => {},
     ){
         const pane = this
 
@@ -80,6 +101,25 @@ export class WamPadPane implements IContentRenderer{
             gui.top_color.link(({to}) => pane.top_color.value=to)
             gui.bottom_color.link(({to}) => pane.bottom_color.value=to)
             gui.front_face.link(({to}) => pane.front_face.value=to??"")
+            gui.face_transform.link(({to}) => {
+                for(const input of [
+                    pane.face_x, pane.face_x_slider,
+                    pane.face_y, pane.face_y_slider,
+                    pane.face_rotation, pane.face_rotation_slider,
+                    pane.face_scale, pane.face_scale_slider,
+                ]){
+                    input.removeAttribute("aria-invalid")
+                }
+                pane.face_transform_status.textContent = ""
+                pane.face_x.value = to.x.toString()
+                pane.face_x_slider.value = to.x.toString()
+                pane.face_y.value = to.y.toString()
+                pane.face_y_slider.value = to.y.toString()
+                pane.face_rotation.value = to.rotation_degrees.toString()
+                pane.face_rotation_slider.value = to.rotation_degrees.toString()
+                pane.face_scale.value = to.scale.toString()
+                pane.face_scale_slider.value = to.scale.toString()
+            })
             gui.pad_outline_color.link(({to}) => pane.outline_color.value=to)
             gui.pad_outline_width.link(({to}) => pane.outline_width.value=to.toString())
             gui.front_face_color.link(({to}) => pane.face_color.value=to)
@@ -92,6 +132,49 @@ export class WamPadPane implements IContentRenderer{
         this.bottom_color.oninput = ()=> gui_generator.value.bottom_color.value = this.bottom_color.value
         this.face_color.oninput = ()=> gui_generator.value.front_face_color.value = this.face_color.value
         this.front_face.oninput = ()=> gui_generator.value.front_face.value = this.front_face.value=="" ? null : this.front_face.value
+        const transformInputs: [HTMLInputElement, keyof FaceTransform][] = [
+            [this.face_x, "x"],
+            [this.face_x_slider, "x"],
+            [this.face_y, "y"],
+            [this.face_y_slider, "y"],
+            [this.face_rotation, "rotation_degrees"],
+            [this.face_rotation_slider, "rotation_degrees"],
+            [this.face_scale, "scale"],
+            [this.face_scale_slider, "scale"],
+        ]
+        const updateFaceTransform = (input: HTMLInputElement, key: keyof FaceTransform) => {
+            const value = Number(input.value)
+            if(input.value.trim() === "" || !Number.isFinite(value) || (key === "scale" && value <= 0)){
+                input.setAttribute("aria-invalid", "true")
+                this.face_transform_status.textContent = key === "scale"
+                    ? "Scale must be finite and greater than 0."
+                    : "Texture transform values must be finite numbers."
+                return
+            }
+            input.removeAttribute("aria-invalid")
+            this.face_transform_status.textContent = ""
+            gui_generator.value.face_transform.value = {
+                ...gui_generator.value.face_transform.value,
+                [key]: value,
+            }
+        }
+        for(const [input, key] of transformInputs){
+            input.onfocus = () => this.historyTransaction?.begin("Transform face texture")
+            input.onpointerdown = () => this.historyTransaction?.begin("Transform face texture")
+            input.onkeydown = event => {
+                if(!event.repeat) this.historyTransaction?.begin("Transform face texture")
+            }
+            input.oninput = () => updateFaceTransform(input, key)
+            input.onchange = () => this.historyTransaction?.commit()
+        }
+        this.reset_face_transform.onclick = () => {
+            void this.runHistoryCommand(
+                "Reset face texture transform",
+                () => { gui_generator.value.face_transform.value = {...DEFAULT_FACE_TRANSFORM} },
+            ).catch(error => console.error("Unable to reset face texture transform", error))
+        }
+        this.show_face_transform_overlay.onchange = () =>
+            this.setFaceTransformOverlayVisible(this.show_face_transform_overlay.checked)
         this.reference_visible.oninput = () => {
             this.thumbnailReference.visible.value = this.reference_visible.checked
         }

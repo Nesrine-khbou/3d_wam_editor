@@ -1,7 +1,22 @@
-import { Color3, Color4, Mesh, Scene, StandardMaterial, Texture, TransformNode, Vector2 } from "@babylonjs/core"
+import { Color3, Color4, Mesh, Scene, StandardMaterial, Texture, TransformNode, Vector2, VertexBuffer } from "@babylonjs/core"
 import { MOValue } from "../../observable/collections/OValue.ts"
 import { colorizeMesh, createSurface, createVolume } from "../vertexs.ts"
 import { CSettings, CSettingsValue, CSettingsValues } from "../../control/controls/settings/settings.ts"
+import { DEFAULT_FACE_TRANSFORM, FaceTransform, normalizeFaceTransform, svgFaceTransform, textureUvToSourceUv } from "./faceTransform.ts"
+
+class FaceTransformValue extends MOValue<FaceTransform>{
+    override set(value: FaceTransform): void{
+        super.set(normalizeFaceTransform(value))
+    }
+
+    override get value(): FaceTransform{
+        return super.value
+    }
+
+    override set value(value: FaceTransform){
+        this.set(value)
+    }
+}
 
 function createCircle(corner: number, offset: number=0){
     const points = []
@@ -67,6 +82,7 @@ export class Decoration{
     readonly face_color = new MOValue("#ffffff")
 
     readonly front_face = new MOValue<DecorationImage|null>(null)
+    readonly face_transform: MOValue<FaceTransform> = new FaceTransformValue({...DEFAULT_FACE_TRANSFORM})
     readonly shape = new MOValue<DecorationShape>("rectangle")
     readonly modifier = new MOValue<keyof typeof DECORATION_SHAPE_MODIFIER>("normal")
     readonly modifier_strength = new MOValue(.5)
@@ -131,6 +147,15 @@ export class Decoration{
             }
         }
 
+        const updateFaceTransform = ()=>{
+            const transform = this.face_transform.value
+            if(transform.x === 0 && transform.y === 0 && transform.rotation_degrees === 0 && transform.scale === 1){
+                image.removeAttribute("transform")
+            }else{
+                image.setAttribute("transform", svgFaceTransform(transform))
+            }
+        }
+
         const updateOutline = ()=>{
             if(this.outline_width.value>0){
                 shape.setAttribute("stroke", this.outline_color.value)
@@ -169,6 +194,7 @@ export class Decoration{
             this.top_color.observable.add(updateGradient),
             this.bottom_color.observable.add(updateGradient),
             this.front_face.observable.add(updateBackground),
+            this.face_transform.observable.add(updateFaceTransform),
             this.shape.observable.add(updateShape),
             this.modifier.observable.add(updateShape),
             this.modifier_strength.observable.add(updateShape),
@@ -177,6 +203,7 @@ export class Decoration{
         ]
         updateShape()
         updateBackground()
+        updateFaceTransform()
         updateGradient()
 
         return {
@@ -225,6 +252,8 @@ export class Decoration{
         }
 
         let face = null as Mesh|null
+        let currentShapePoints = this.current_shape
+        let baseFaceUVs = null as number[]|null
         const updateFace = ()=>{
             if(face!=null){
                 const mat = face.material as StandardMaterial
@@ -232,20 +261,45 @@ export class Decoration{
                 mat.dispose()
                 face.dispose()
                 face = null
+                baseFaceUVs = null
             }
             if(this.front_face.value!=null){
                 const url = DECORATION_IMAGES[this.front_face.value] ?? this.front_face.value
-                const points = this.current_shape
-                face = createSurface("wampad face",scene,points)
+                face = createSurface("wampad face",scene,currentShapePoints)
                 face!!.parent = mesh
                 face!!.position.y = 0.510
+                baseFaceUVs = Array.from(face!!.getVerticesData(VertexBuffer.UVKind) ?? [])
                 const faceMaterial = face!!.material = new StandardMaterial("wampad face mat", scene)
                 const texture = new Texture(url, scene)
                 texture.hasAlpha = true
                 faceMaterial.diffuseTexture = texture
                 faceMaterial.specularColor = new Color3(0, 0, 0)
+                updateFaceTransform()
                 updateFaceColor()
             }
+        }
+
+        const updateFaceTransform = ()=>{
+            if(face == null || baseFaceUVs == null) return
+            const transform = this.face_transform.value
+            const isIdentity = transform.x === 0 && transform.y === 0
+                && transform.rotation_degrees === 0 && transform.scale === 1
+            const uvs = [...baseFaceUVs]
+            if(!isIdentity){
+                for(let index = 0; index < uvs.length; index += 2){
+                    const source = textureUvToSourceUv(
+                        {x: baseFaceUVs[index], y: baseFaceUVs[index + 1]},
+                        transform,
+                    )
+                    uvs[index] = source.x
+                    uvs[index + 1] = source.y
+                }
+            }
+            face.setVerticesData(VertexBuffer.UVKind, uvs, false)
+            const faceMaterial = face.material as StandardMaterial
+            const texture = faceMaterial.diffuseTexture as Texture
+            texture.wrapU = isIdentity ? Texture.WRAP_ADDRESSMODE : Texture.CLAMP_ADDRESSMODE
+            texture.wrapV = isIdentity ? Texture.WRAP_ADDRESSMODE : Texture.CLAMP_ADDRESSMODE
         }
 
         const updateFaceColor = ()=>{
@@ -257,8 +311,8 @@ export class Decoration{
 
         const updateShape = ()=>{
             mesh?.dispose()
-            const points = this.current_shape
-            mesh = createVolume("decoration",scene,points)
+            currentShapePoints = this.current_shape
+            mesh = createVolume("decoration",scene,currentShapePoints)
  
             mesh!!.material = material
             mesh!!.setParent(transform)
@@ -287,6 +341,7 @@ export class Decoration{
             this.bottom_color.observable.add(updateColor),
             this.face_color.observable.add(updateFaceColor),
             this.front_face.observable.add(updateFace),
+            this.face_transform.observable.add(updateFaceTransform),
             this.shape.observable.add(updateShape),
             this.modifier.observable.add(updateShape),
             this.modifier_strength.observable.add(updateShape),

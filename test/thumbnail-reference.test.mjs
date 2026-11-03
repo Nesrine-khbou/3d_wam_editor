@@ -18,6 +18,7 @@ globalThis.FontFace ??= class {
 
 const {
     loadThumbnailReference,
+    loadWamThumbnailReference,
     resolveThumbnailUrl,
     serializeWamGuiDescriptor,
 } = await import("../dist/index.js");
@@ -77,8 +78,51 @@ test("loaded thumbnail exposes natural dimensions and exact aspect ratio", async
     assert.equal(loaded.aspectRatio, 1600 / 749);
 });
 
+test("WAM descriptor.json thumbnail overrides stale module thumbnail metadata", async () => {
+    const image = fakeImage({ width: 682, height: 319 });
+    const loaded = await loadWamThumbnailReference(
+        "https://wam-4tt.pages.dev/Pro54/index.js",
+        "icon.png",
+        async url => {
+            assert.equal(url, "https://wam-4tt.pages.dev/Pro54/descriptor.json");
+            return {
+                ok: true,
+                status: 200,
+                async json() {
+                    return { thumbnail: "thumbnail.png" };
+                },
+            };
+        },
+        () => image,
+    );
+
+    assert.equal(loaded.url, "https://wam-4tt.pages.dev/Pro54/thumbnail.png");
+    assert.equal(loaded.aspectRatio, 682 / 319);
+});
+
+test("WAM thumbnail falls back to module metadata when descriptor.json cannot be read", async () => {
+    const image = fakeImage();
+    const originalWarn = console.warn;
+    const warnings = [];
+    console.warn = (...args) => warnings.push(args);
+    try {
+        const loaded = await loadWamThumbnailReference(
+            "https://wam.test/plugin/index.js",
+            "icon.png",
+            async () => { throw new Error("offline") },
+            () => image,
+        );
+
+        assert.equal(loaded.url, "https://wam.test/plugin/icon.png");
+        assert.equal(warnings.length, 1);
+    } finally {
+        console.warn = originalWarn;
+    }
+});
+
 test("missing thumbnails are empty and malformed URLs are explicit errors", async () => {
     assert.equal(await loadThumbnailReference(undefined, ""), null);
+    assert.equal(await loadWamThumbnailReference("", undefined), null);
     assert.throws(() => resolveThumbnailUrl("panel.png", ""), /descriptor or module URL is required/);
     assert.throws(() => resolveThumbnailUrl({ src: "panel.png" }, "https://wam.test/index.js"), /must be a non-empty URL/);
 });

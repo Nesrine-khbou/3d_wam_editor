@@ -72,7 +72,13 @@ function executeDocumentCommand(label: string, operation: () => void | Promise<v
     })
 }
 const selector = new ControlSelectorPane(controls,editor.gui_generator)
-const wampad = new WamPadPane(editor.gui_generator, thumbnail_reference, runHistoryCommand)
+const wampad = new WamPadPane(
+    editor.gui_generator,
+    thumbnail_reference,
+    runHistoryCommand,
+    documentHistory,
+    visible => editor.setFaceTransformOverlayVisible(visible),
+)
 const workspace = new DesignWorkspacePane(editor, view_3d)
 const load_save = new LoadSavePane(editor.gui_generator, wam_loader.url, controls, runHistoryCommand)
 const images = new ImagesPane(DECORATION_IMAGES)

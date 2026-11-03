@@ -184,7 +184,7 @@ This is a workspace/layout enhancement, not a second independent editor model.
 
 ### 5.2 Descriptor thumbnail as design reference and aspect-ratio source
 
-When a WAM is loaded, read its descriptor thumbnail and display the image's natural dimensions and ratio. Resolve the relative filename against the WAM module URL (equivalently, resolve `thumbnail` against the descriptor URL). The reference image shall:
+When a WAM is loaded, read `thumbnail` from the WAM's adjacent `descriptor.json` and display the image's natural dimensions and ratio. Resolve the relative filename against that descriptor URL. This file is authoritative over a potentially stale thumbnail value embedded in the loaded module; when the descriptor cannot be read, use the module metadata as a reported fallback. The reference image shall:
 
 - Be toggleable as a 2D design reference, with adjustable opacity and fit/contain behavior.
 - Have a clear distinction between a non-exported design reference and the optional front-face image/texture.
@@ -193,6 +193,7 @@ When a WAM is loaded, read its descriptor thumbnail and display the image's natu
 - Retain explicit loading/error feedback for unavailable images or blocked cross-origin access.
 
 The aspect ratio defines proportions only. It must not be treated as the physical/world size of the instrument.
+The loaded Web Audio Module GUI pane shall have an independently scrollable viewport on both axes. Its content must retain its authored size when it exceeds the pane; the docked viewport must not shrink or crop the GUI.
 
 #### Pro-54 reference values
 
@@ -485,6 +486,8 @@ Implement in numbered increments. Each subtask should be independently reviewabl
 - **8.3** Persist transforms and apply them consistently in HTML/2D and Babylon.js/3D previews.
 - **8.4** Ensure old projects render identically when transform fields are absent.
 - **8.5** Test transform math, persistence, defaults and cross-renderer consistency.
+
+**Implementation note:** The shared transform model uses image-relative translation, a center pivot, clockwise front-view rotation and positive uniform scale. The 2D preview applies the transform to its SVG image and can show a matching editor-only outline. Babylon.js remaps UV coordinates on the original body-face mesh, clamping texture edges while preserving its original vertices, normals, colors and indices. Untouched legacy descriptors retain identity rendering and do not gain V2 transform metadata.
 
 ### 8.9 Task 9 — Extend the reusable widget catalog
 

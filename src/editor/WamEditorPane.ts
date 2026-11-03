@@ -16,6 +16,7 @@ import {
     shouldSelectInMarquee,
     SnapSource,
 } from "../gui/editorInteractions.ts";
+import { svgFaceTransform } from "../utils/visual/faceTransform.ts";
 
 export class WamEditorPane implements IContentRenderer{
 
@@ -24,6 +25,8 @@ export class WamEditorPane implements IContentRenderer{
     private reference_overlay = html.a`<div aria-hidden="true"></div>`
     private grid_overlay = html.a`<div class="editor-grid" aria-hidden="true"></div>`
     private marquee = html.a`<div class="selection-marquee" aria-hidden="true"></div>`
+    private faceTransformOverlay = document.createElementNS("http://www.w3.org/2000/svg", "svg")
+    private showFaceTransformOverlay = false
     private referenceOverlayDisposables: (() => void)[] = []
     private gridSettings = { visible: false, snapEnabled: false, spacing: 0.05 }
     onSnapFeedback: (source: SnapSource) => void = () => {}
@@ -70,6 +73,26 @@ export class WamEditorPane implements IContentRenderer{
             opacity: 0.35;
             z-index: 3;
         `
+        this.faceTransformOverlay.setAttribute("viewBox", "0 0 100 100")
+        this.faceTransformOverlay.setAttribute("preserveAspectRatio", "none")
+        this.faceTransformOverlay.setAttribute("aria-hidden", "true")
+        this.faceTransformOverlay.style.cssText = `
+            position: absolute;
+            display: none;
+            pointer-events: none;
+            overflow: visible;
+            z-index: 4;
+        `
+        const faceTransformBorder = document.createElementNS("http://www.w3.org/2000/svg", "rect")
+        faceTransformBorder.setAttribute("x", "0")
+        faceTransformBorder.setAttribute("y", "0")
+        faceTransformBorder.setAttribute("width", "100")
+        faceTransformBorder.setAttribute("height", "100")
+        faceTransformBorder.setAttribute("fill", "none")
+        faceTransformBorder.setAttribute("stroke", "#ff8c42")
+        faceTransformBorder.setAttribute("stroke-width", "0.8")
+        faceTransformBorder.setAttribute("stroke-dasharray", "3 2")
+        this.faceTransformOverlay.appendChild(faceTransformBorder)
 
         const html: ControlContextTarget<HTMLElement,HTMLElement> = {
             root: this.container,
@@ -85,6 +108,7 @@ export class WamEditorPane implements IContentRenderer{
         this.attachReferenceOverlay(this.gui_generator.value)
         this.container.appendChild(this.grid_overlay)
         this.container.appendChild(this.marquee)
+        this.container.appendChild(this.faceTransformOverlay)
         this.thumbnailReference?.state.link(({to})=>{
             if(to.status === "ready"){
                 const image = to.image
@@ -180,6 +204,11 @@ export class WamEditorPane implements IContentRenderer{
         this.updateGridOverlay()
     }
 
+    setFaceTransformOverlayVisible(visible: boolean): void {
+        this.showFaceTransformOverlay = visible
+        this.updateFaceTransformOverlay()
+    }
+
     private getGridSnapSettings(): GridSnapSettings {
         return { enabled: this.gridSettings.snapEnabled, spacing: this.gridSettings.spacing }
     }
@@ -262,6 +291,10 @@ export class WamEditorPane implements IContentRenderer{
         this.referenceOverlayDisposables.push(
             generator.aspect_ratio.observable.add(update),
             generator.size.observable.add(update),
+            generator.aspect_ratio.observable.add(() => this.updateFaceTransformOverlay(generator)),
+            generator.size.observable.add(() => this.updateFaceTransformOverlay(generator)),
+            generator.face_transform.observable.add(() => this.updateFaceTransformOverlay(generator)),
+            generator.front_face.observable.add(() => this.updateFaceTransformOverlay(generator)),
         )
         this.referenceOverlayDisposables.push(
             generator.aspect_ratio.observable.add(() => this.updateGridOverlay(generator)),
@@ -269,6 +302,24 @@ export class WamEditorPane implements IContentRenderer{
         )
         update()
         this.updateGridOverlay(generator)
+        this.updateFaceTransformOverlay(generator)
+    }
+
+    private updateFaceTransformOverlay(generator = this.gui_generator.value): void {
+        const ratio = generator.aspect_ratio.value
+        const size = generator.size.value
+        const width = size * (ratio > 1 ? 1 : ratio)
+        const height = size * (ratio > 1 ? 1 / ratio : 1)
+        this.faceTransformOverlay.style.display =
+            this.showFaceTransformOverlay && generator.front_face.value ? "block" : "none"
+        this.faceTransformOverlay.style.left = `${(1 - width) * 50}%`
+        this.faceTransformOverlay.style.top = `${(1 - height) * 50}%`
+        this.faceTransformOverlay.style.width = `${width * 100}%`
+        this.faceTransformOverlay.style.height = `${height * 100}%`
+        this.faceTransformOverlay.firstElementChild?.setAttribute(
+            "transform",
+            svgFaceTransform(generator.face_transform.value),
+        )
     }
 
     private updateGridOverlay(generator = this.gui_generator.value): void {

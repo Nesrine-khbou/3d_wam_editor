@@ -14,7 +14,7 @@ export class WamLoaderPane implements IContentRenderer{
 
     parameters_info = {} as WamParameterInfoMap
 
-    element = html.a`<div class="menu _vertical"></div>`
+    element = html.a`<div class="menu _vertical wam-loader"></div>`
 
     indicator = new Indicator()
 
@@ -27,7 +27,25 @@ export class WamLoaderPane implements IContentRenderer{
         const input = html.a`<input type="text" />` as HTMLInputElement
         input.onchange = ()=> this.url.value=input.value
 
-        const container = html.a`<div class="container"></div>`
+        const container = html.a`<div class="container wam-loader__gui-viewport"></div>`
+        this.element.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+        `
+        container.style.cssText = `
+            align-self: stretch;
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: 0;
+            margin: 0;
+            box-sizing: border-box;
+            overflow: auto;
+        `
         this.element.replaceChildren(label, input, container, this.indicator.element)
 
         // Url to Wam
@@ -58,6 +76,11 @@ export class WamLoaderPane implements IContentRenderer{
             try{
                 if(wam){
                     const gui = await wam.createGui() as HTMLElement
+                    if(gui){
+                        gui.style.flex = "0 0 auto"
+                        gui.style.maxWidth = "none"
+                        gui.style.maxHeight = "none"
+                    }
                     container.replaceChildren(gui)
                     this.gui.value = gui
                 }

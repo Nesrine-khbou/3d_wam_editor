@@ -73,6 +73,57 @@ export async function loadThumbnailReference(
     }
 }
 
+export async function loadWamThumbnailReference(
+    moduleUrl: string,
+    fallbackThumbnail: unknown,
+    fetchDescriptor: typeof fetch = fetch,
+    createImage: () => HTMLImageElement = () => new Image(),
+): Promise<LoadedThumbnailReference | null> {
+    if(!moduleUrl){
+        if(fallbackThumbnail === undefined || fallbackThumbnail === null || fallbackThumbnail === ""){
+            return null
+        }
+        throw new TypeError("A WAM module URL is required to resolve its descriptor thumbnail")
+    }
+    const descriptorUrl = new URL("./descriptor.json", moduleUrl).href
+    let thumbnail = fallbackThumbnail
+    let useDescriptorUrl = false
+
+    try {
+        const response = await fetchDescriptor(descriptorUrl)
+        if(!response.ok){
+            throw new Error(`WAM descriptor request failed with HTTP ${response.status}`)
+        }
+        const descriptor: unknown = await response.json()
+        if(typeof descriptor !== "object" || descriptor === null || Array.isArray(descriptor)){
+            throw new TypeError("WAM descriptor must be a JSON object")
+        }
+        if("thumbnail" in descriptor){
+            thumbnail = descriptor.thumbnail
+            useDescriptorUrl = true
+        }
+    } catch(error) {
+        if(thumbnail === undefined || thumbnail === null || thumbnail === ""){
+            throw new Error(
+                `Unable to read WAM descriptor "${descriptorUrl}" to find its thumbnail: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            )
+        }
+        console.warn(
+            `Unable to read WAM descriptor "${descriptorUrl}"; using the module's thumbnail metadata instead`,
+            error,
+        )
+    }
+
+    return loadThumbnailReference(
+        thumbnail,
+        moduleUrl,
+        useDescriptorUrl ? descriptorUrl : undefined,
+        createImage,
+    )
+}
+
 export class WamThumbnailReference {
     readonly state = new MOValue<ThumbnailReferenceState>({ status: "empty" })
     readonly visible = new MOValue(true)
@@ -97,19 +148,20 @@ export class WamThumbnailReference {
         const thumbnail = this.wam.value?.descriptor?.thumbnail
         const moduleUrl = this.moduleUrl.value
 
-        if (!thumbnail) {
+        if (!this.wam.value || !moduleUrl) {
             this.state.value = { status: "empty" }
             return
         }
 
         try {
-            const url = resolveThumbnailUrl(thumbnail, moduleUrl)
-            if (url === null) {
-                this.state.value = { status: "empty" }
-                return
+            const descriptorUrl = new URL("./descriptor.json", moduleUrl).href
+            if (!thumbnail) {
+                this.state.value = { status: "loading", url: descriptorUrl }
+            } else {
+                const url = resolveThumbnailUrl(thumbnail, moduleUrl)
+                this.state.value = { status: "loading", url: url ?? descriptorUrl }
             }
-            this.state.value = { status: "loading", url }
-            const loaded = await loadThumbnailReference(thumbnail, moduleUrl)
+            const loaded = await loadWamThumbnailReference(moduleUrl, thumbnail)
             if (requestId !== this.requestId) return
             if (loaded === null) {
                 this.state.value = { status: "empty" }

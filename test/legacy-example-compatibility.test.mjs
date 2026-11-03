@@ -238,6 +238,75 @@ test("Babylon rendering keeps legacy pad and normalized control scaling", async 
     }
 });
 
+test("Babylon face texture UVs transform and reset without changing mesh topology", async () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const root = new TransformNode("face-transform-root", scene);
+    const generator = libraryApi.WamGUIGenerator.create({
+        babylonjs: {
+            root,
+            defineField() {},
+            defineDraggableField() {},
+            defineAnInput() {},
+            defineAnOutput() {},
+            defineAnEventInput() {},
+            defineAnEventOutput() {},
+        },
+    });
+
+    try {
+        await generator.load({
+            aspect_ratio: 1,
+            size: 0.8,
+            top_color: "#ffffff",
+            bottom_color: "#000000",
+            face: "https://example.test/face.png",
+            controls: [],
+        }, {});
+        const face = scene.meshes.find(mesh => mesh.name === "wampad face");
+        assert.ok(face);
+        const basePositions = [...face.getVerticesData("position")];
+        const baseIndices = [...face.getIndices()];
+        const baseUvs = [...face.getVerticesData("uv")];
+
+        generator.face_transform.value = {
+            x: 0.2,
+            y: 0,
+            rotation_degrees: 0,
+            scale: 1,
+        };
+        assert.notDeepEqual([...face.getVerticesData("uv")], baseUvs);
+
+        generator.face_transform.value = {
+            x: 0.2,
+            y: 0.2,
+            rotation_degrees: 30,
+            scale: 1.5,
+        };
+        const transformedUvs = [...face.getVerticesData("uv")];
+        assert.notDeepEqual(transformedUvs, baseUvs);
+        assert.deepEqual([...face.getVerticesData("position")], basePositions);
+        assert.deepEqual([...face.getIndices()], baseIndices);
+
+        generator.face_transform.value = {
+            x: 0,
+            y: 0,
+            rotation_degrees: 0,
+            scale: 1,
+        };
+        assert.deepEqual([...face.getVerticesData("uv")], baseUvs);
+        assert.deepEqual([...face.getVerticesData("position")], basePositions);
+        assert.deepEqual([...face.getIndices()], baseIndices);
+        assert.ok(transformedUvs.some((uv, index) => uv !== baseUvs[index]));
+        assert.equal(face.material.diffuseTexture.wrapU, 1);
+        assert.equal(face.material.diffuseTexture.wrapV, 1);
+    } finally {
+        generator.dispose();
+        scene.dispose();
+        engine.dispose();
+    }
+});
+
 test("V2 logical width scales body and 3D controls without changing normalized layout", async () => {
     const engine = new NullEngine();
     const scene = new Scene(engine);
@@ -389,6 +458,42 @@ test("V2 face transforms survive generator save/load for history snapshots", asy
             generator.load({ ...descriptor, required_features: [] }, library),
             /requires the "wam3dgenerator.face-transform.v1" feature declaration/,
         );
+    } finally {
+        generator.dispose();
+    }
+});
+
+test("editing a legacy face transform materializes the V2 feature without changing untouched legacy saves", async () => {
+    const { library } = createMockControlLibrary(["fixture_control"]);
+    const generator = libraryApi.WamGUIGenerator.create({});
+    const descriptor = {
+        aspect_ratio: 1,
+        size: 0.8,
+        top_color: "#ffffff",
+        bottom_color: "#000000",
+        controls: [],
+    };
+
+    try {
+        await generator.load(descriptor, library);
+        assert.deepEqual(generator.save(library), getExpectedSavedDescriptor(descriptor));
+
+        generator.face_transform.value = {
+            ...generator.face_transform.value,
+            x: 0.25,
+        };
+        const saved = generator.save(library);
+        assert.equal(saved.schema_version, 2);
+        assert.ok(saved.required_features.includes("wam3dgenerator.face-transform.v1"));
+        assert.deepEqual(saved.face_transform, {
+            x: 0.25,
+            y: 0,
+            rotation_degrees: 0,
+            scale: 1,
+        });
+
+        await generator.load(saved, library);
+        assert.deepEqual(generator.save(library), { ...saved, editor_features: [] });
     } finally {
         generator.dispose();
     }

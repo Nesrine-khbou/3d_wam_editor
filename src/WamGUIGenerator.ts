@@ -7,6 +7,8 @@ import { Decoration } from "./utils/visual/Decoration.ts";
 import { CSettingsValues } from "./control/controls/settings/settings.ts";
 import { ShareMap } from "./control/ShareMap.ts";
 import { WAM_GUI_FEATURES } from "./descriptor/WamGuiDescriptor.ts";
+import { DEFAULT_FACE_TRANSFORM, normalizeFaceTransform } from "./utils/visual/faceTransform.ts";
+import type { FaceTransform } from "./utils/visual/faceTransform.ts";
 
 // @ts-ignore
 window.WAMExtensions ??= {}
@@ -61,6 +63,7 @@ export class WamGUIGenerator{
     readonly front_face_color = this.pad_decoration.face_color
     readonly pad_shape = this.pad_decoration.shape
     readonly front_face = this.pad_decoration.front_face
+    readonly face_transform: MOValue<FaceTransform> = this.pad_decoration.face_transform
     readonly size = new MOValue(.8)
     readonly aspect_ratio = new MOValue(1)
     readonly world_width = new LogicalWorldWidthValue(null)
@@ -68,6 +71,9 @@ export class WamGUIGenerator{
     private requiredFeatures: string[] = []
     private editorFeatures: string[] = []
     private faceTransform?: WamGUICode["face_transform"]
+    private faceTransformExplicit = false
+    private faceTransformEdited = false
+    private loadingFaceTransform = false
     readonly pad_outline_width = this.pad_decoration.outline_width
     readonly pad_outline_color = this.pad_decoration.outline_color
     readonly modifier = this.pad_decoration.modifier
@@ -76,6 +82,12 @@ export class WamGUIGenerator{
     private constructor(
         host: Partial<ControlHost>,
     ){
+        this.face_transform.observable.add(()=>{
+            if(!this.loadingFaceTransform){
+                this.faceTransformExplicit = true
+                this.faceTransformEdited = true
+            }
+        })
         this.host = {
             ...host,
         }
@@ -251,22 +263,20 @@ export class WamGUIGenerator{
             if(typeof code.face_transform !== "object" || code.face_transform === null || Array.isArray(code.face_transform)){
                 throw new TypeError("face_transform must be an object")
             }
-            for(const key of ["x", "y", "rotation_degrees", "scale"] as const){
-                const value = code.face_transform[key]
-                if(value !== undefined && (typeof value !== "number" || !Number.isFinite(value))){
-                    throw new TypeError(`face_transform.${key} must be a finite number`)
-                }
-            }
-            if(code.face_transform.scale !== undefined && code.face_transform.scale <= 0){
-                throw new RangeError("face_transform.scale must be greater than 0")
-            }
+            normalizeFaceTransform(code.face_transform)
         }
         this.descriptorSchemaVersion = schemaVersion
         this.requiredFeatures = [...(code.required_features ?? [])]
         this.editorFeatures = [...(code.editor_features ?? [])]
-        this.faceTransform = code.face_transform === undefined
-            ? undefined
-            : structuredClone(code.face_transform)
+        this.loadingFaceTransform = true
+        try{
+            this.face_transform.value = normalizeFaceTransform(code.face_transform ?? DEFAULT_FACE_TRANSFORM)
+        }finally{
+            this.loadingFaceTransform = false
+        }
+        this.faceTransform = code.face_transform === undefined ? undefined : structuredClone(code.face_transform)
+        this.faceTransformExplicit = code.face_transform !== undefined
+        this.faceTransformEdited = false
         this.aspect_ratio.value = code.aspect_ratio
         this.size.value = code.size ?? 1
         this.world_width.value = code.world_width ?? null
@@ -341,8 +351,15 @@ export class WamGUIGenerator{
                 WAM_GUI_FEATURES.worldWidth,
             ])]
         }
-        if(this.faceTransform !== undefined){
-            descriptor.face_transform = structuredClone(this.faceTransform)
+        if(this.faceTransformExplicit){
+            descriptor.schema_version = 2
+            descriptor.required_features = [...new Set([
+                ...this.requiredFeatures,
+                WAM_GUI_FEATURES.faceTransform,
+            ])]
+            descriptor.face_transform = this.faceTransformEdited
+                ? {...this.face_transform.value}
+                : structuredClone(this.faceTransform)
         }
         return descriptor
     }
