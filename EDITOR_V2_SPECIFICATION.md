@@ -492,11 +492,13 @@ Implement in numbered increments. Each subtask should be independently reviewabl
 
 ### 8.9 Task 9 — Extend the reusable widget catalog
 
-- **9.1** Define/review the factory contract separating widget behavior, parameter binding and visual skin.
-- **9.2** Confirm HTML/3D support declarations, lifecycle/disposal and actionable handling for unknown widget types.
-- **9.3** Add the first requested alternate rotary skin reusing an existing parameter behavior.
-- **9.4** Add switch behaviors/skins and digital display/readout widgets with explicitly defined data sources.
-- **9.5** Test each widget's settings, binding, 2D/3D rendering, serialization, clipboard and undo/redo behavior.
+- **9.1** Define/review the factory contract separating widget behavior, parameter binding and visual skin. **Implemented:** the existing factory methods remain responsible for identity text, settings schema/defaults, creation and destruction; optional stable `WidgetDefinition` metadata declares behavior, skin, render targets, V2 feature ID and state persistence. `ParameterControl` remains the shared numeric binding behavior.
+- **9.2** Confirm HTML/3D support declarations, lifecycle/disposal and actionable handling for unknown widget types. **Implemented:** every built-in widget declares HTML and Babylon.js support; target mismatches fail before a descriptor replaces the current design. Unknown descriptor IDs report the missing type and available catalog IDs. Parameter-field listeners now use revision/disposal guards, and palette previews clone their static rendering and dispose the temporary control.
+- **9.3** Add the first requested alternate rotary skin reusing an existing parameter behavior. **Implemented:** `rotary_knob` reuses normalized WAM parameter binding and settings patterns while rendering an alternate dial/indicator in HTML and Babylon.js.
+- **9.4** Add switch behaviors/skins and digital display/readout widgets with explicitly defined data sources. **Implemented:** `toggle_switch` and `momentary_button` bind one numeric target and map its normalized range to on/off; momentary input resets on pointer/keyboard release. `numeric_display` observes one or two selected target fields, supports parameter/decimal/percent/label formats, precision and custom units, and does not declare an editable field or participate in persisted WAM state.
+- **9.5** Test each widget's settings, binding, 2D/3D rendering, serialization, clipboard and undo/redo behavior. **Implemented:** focused catalog tests cover settings/defaults, target declarations, field behavior, HTML and Babylon.js creation/disposal, live display updates, V2 feature declarations and save/reload, clipboard-shaped descriptor copies, undo/redo, state exclusion, unknown-type errors, and rotary drag/keyboard operation in HTML and simulated Babylon.js pointer interaction.
+
+**Implementation note:** New descriptor types use stable IDs `rotary_knob`, `toggle_switch`, `momentary_button` and `numeric_display`, each with a matching `wam3dgenerator.widget.<id>.v1` required feature. Numeric displays are observers, not editable controls; their second target is optional. Existing descriptor control IDs and factory settings remain unchanged.
 
 ### 8.10 Task 10 — Integrate and release the V2 library with WAM Jam Party
 

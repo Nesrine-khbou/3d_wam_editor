@@ -12,13 +12,15 @@ export class DesignWorkspacePane implements IContentRenderer {
     readonly element = html.a`<div class="design-workspace"></div>`
     private readonly content = html.a`<div class="design-workspace__content"></div>`
     private readonly editorRegion = html.a`<section class="design-workspace__editor" aria-label="2D editor"></section>`
-    private readonly previewRegion = html.a`<section class="design-workspace__preview" aria-label="3D preview"></section>`
+    private readonly previewRegion = html.a`<section class="design-workspace__preview" aria-label="3D preview" title="Drag to orbit · right-drag to pan · scroll to zoom"></section>`
     private readonly divider = html.a`
         <div class="design-workspace__divider" role="separator" aria-label="Resize 2D and 3D views"
             aria-orientation="vertical" tabindex="0"></div>
     ` as HTMLDivElement
     private readonly maximizeButton = html.a`<button type="button" class="design-workspace__maximize"></button>` as HTMLButtonElement
     private readonly toolbar = html.a`<div class="design-workspace__toolbar"></div>`
+    private readonly editorViewport = html.a`<div class="design-workspace__2d-viewport" aria-label="Scrollable 2D design canvas"></div>`
+    private readonly previewViewport = html.a`<div class="design-workspace__3d-viewport" aria-label="Scrollable 3D design canvas"></div>`
     private readonly gridToggle = html.a`<input type="checkbox" aria-label="Show design grid">` as HTMLInputElement
     private readonly snapToggle = html.a`<input type="checkbox" aria-label="Snap controls to grid">` as HTMLInputElement
     private readonly spacingInput = html.a`
@@ -43,14 +45,19 @@ export class DesignWorkspacePane implements IContentRenderer {
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5M7.5 10.8h6.6M10.8 7.5v6.6"></path></svg>
     </button>` as HTMLButtonElement
     private readonly previewZoomReset = html.a`<button type="button" aria-label="Reset 3D preview zoom">Reset</button>` as HTMLButtonElement
+    private readonly previewZoomLabel = html.a`<output aria-label="3D preview canvas size">100%</output>`
     private panelApi: DockviewPanelApi | null = null
     private split = 0.5
     private editorZoom = 1
+    private previewZoom = 1
     private removeResizeObserver: (() => void) | null = null
     private dragging = false
-    private readonly zoomPreviewOut = (): void => this.preview.zoomOut()
-    private readonly zoomPreviewIn = (): void => this.preview.zoomIn()
-    private readonly resetPreviewZoom = (): void => this.preview.resetZoom()
+    private readonly zoomPreviewOut = (): void => this.setPreviewZoom(this.previewZoom - WORKSPACE_ZOOM_STEP)
+    private readonly zoomPreviewIn = (): void => this.setPreviewZoom(this.previewZoom + WORKSPACE_ZOOM_STEP)
+    private readonly resetPreviewZoom = (): void => {
+        this.setPreviewZoom(1)
+        this.preview.resetZoom()
+    }
 
     constructor(
         private readonly editor: WamEditorPane,
@@ -70,14 +77,17 @@ export class DesignWorkspacePane implements IContentRenderer {
         )
         this.previewZoomControls.append(
             this.previewZoomOut,
+            this.previewZoomLabel,
             this.previewZoomIn,
             this.previewZoomReset,
         )
         this.toolbar.append(this.gridControls, this.maximizeButton)
         this.element.append(this.toolbar, this.content)
         this.content.append(this.editorRegion, this.divider, this.previewRegion)
-        this.editorRegion.append(this.editorZoomControls, this.editor.element)
-        this.previewRegion.append(this.previewZoomControls, this.preview.element)
+        this.editorRegion.append(this.editorZoomControls, this.editorViewport)
+        this.previewRegion.append(this.previewZoomControls, this.previewViewport)
+        this.editorViewport.append(this.editor.element)
+        this.previewViewport.append(this.preview.element)
         this.element.style.cssText = "display:grid;grid-template-rows:auto minmax(0,1fr);height:100%;min-height:0"
         this.content.style.cssText = "display:grid;grid-template-columns:minmax(0,1fr) 8px minmax(0,1fr);min-height:0;min-width:0"
         this.editor.element.style.width = "100%"
@@ -186,10 +196,19 @@ export class DesignWorkspacePane implements IContentRenderer {
 
     private setEditorZoom(zoom: number): void {
         this.editorZoom = Math.round(clampWorkspaceZoom(zoom) * 100) / 100
-        this.editor.setZoom(this.editorZoom)
+        this.editor.element.style.width = `${this.editorZoom * 100}%`
+        this.editor.element.style.height = `${this.editorZoom * 100}%`
         this.editorZoomLabel.textContent = `${Math.round(this.editorZoom * 100)}%`
         this.editorZoomOut.disabled = this.editorZoom <= 0.5
         this.editorZoomIn.disabled = this.editorZoom >= 3
+    }
+
+    private setPreviewZoom(zoom: number): void {
+        this.previewZoom = Math.round(clampWorkspaceZoom(zoom) * 100) / 100
+        this.preview.setCanvasZoom(this.previewZoom)
+        this.previewZoomLabel.textContent = `${Math.round(this.previewZoom * 100)}%`
+        this.previewZoomOut.disabled = this.previewZoom <= 0.5
+        this.previewZoomIn.disabled = this.previewZoom >= 3
     }
 
     init(parameters: GroupPanelPartInitParameters): void {

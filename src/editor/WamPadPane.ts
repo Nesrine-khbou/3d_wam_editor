@@ -17,22 +17,22 @@ export class WamPadPane implements IContentRenderer{
             }
         </select>
     ` as HTMLSelectElement
-    private aspect_ratio = html.a`<input type="number" min="0.1" max="10" step="0.1" value="1"/>` as HTMLInputElement
-    private size = html.a`<input type="number" min="0.1" max="1" step="0.1" value=".8"/>` as HTMLInputElement
+    private aspect_ratio = html.a`<input id="pad-aspect-ratio" type="number" min="0.1" max="10" step="0.1" value="1"/>` as HTMLInputElement
+    private size = html.a`<input id="pad-size" type="number" min="0.1" max="1" step="0.1" value=".8"/>` as HTMLInputElement
     private use_world_width = html.a`<input type="checkbox"/>` as HTMLInputElement
-    private world_width = html.a`<input type="number" min="0.01" step="0.01" value="2"/>` as HTMLInputElement
+    private world_width = html.a`<input id="pad-world-width" type="number" min="0.01" step="0.01" value="2"/>` as HTMLInputElement
     private world_width_slider = html.a`<input type="range" min="0.01" max="10" step="0.01" value="2"/>` as HTMLInputElement
-    private top_color = html.a`<input type="color" value="#555555"/>` as HTMLInputElement
-    private bottom_color = html.a`<input type="color" value="#222222"/>` as HTMLInputElement
-    private face_color = html.a`<input type="color" value="#ffffff"/>` as HTMLInputElement
-    private front_face = html.a`<input type="text" value=""/>` as HTMLInputElement
-    private face_x = html.a`<input type="number" step="0.01"/>` as HTMLInputElement
+    private top_color = html.a`<input id="pad-top-color" type="color" value="#555555"/>` as HTMLInputElement
+    private bottom_color = html.a`<input id="pad-bottom-color" type="color" value="#222222"/>` as HTMLInputElement
+    private face_color = html.a`<input id="pad-face-color" type="color" value="#ffffff"/>` as HTMLInputElement
+    private front_face = html.a`<input id="pad-front-face" type="text" value=""/>` as HTMLInputElement
+    private face_x = html.a`<input id="pad-face-x" type="number" step="0.01"/>` as HTMLInputElement
     private face_x_slider = html.a`<input type="range" min="-5" max="5" step="0.01"/>` as HTMLInputElement
-    private face_y = html.a`<input type="number" step="0.01"/>` as HTMLInputElement
+    private face_y = html.a`<input id="pad-face-y" type="number" step="0.01"/>` as HTMLInputElement
     private face_y_slider = html.a`<input type="range" min="-5" max="5" step="0.01"/>` as HTMLInputElement
-    private face_rotation = html.a`<input type="number" step="1"/>` as HTMLInputElement
+    private face_rotation = html.a`<input id="pad-face-rotation" type="number" step="1"/>` as HTMLInputElement
     private face_rotation_slider = html.a`<input type="range" min="-180" max="180" step="1"/>` as HTMLInputElement
-    private face_scale = html.a`<input type="number" min="0.001" step="0.01"/>` as HTMLInputElement
+    private face_scale = html.a`<input id="pad-face-scale" type="number" min="0.001" step="0.01"/>` as HTMLInputElement
     private face_scale_slider = html.a`<input type="range" min="0.1" max="3" step="0.01"/>` as HTMLInputElement
     private reset_face_transform = html.a`<button type="button">Reset texture transform</button>` as HTMLButtonElement
     private show_face_transform_overlay = html.a`<input type="checkbox"/>` as HTMLInputElement
@@ -41,38 +41,109 @@ export class WamPadPane implements IContentRenderer{
     private use_reference_ratio = html.a`<button type="button">Use reference aspect ratio</button>` as HTMLButtonElement
     private reset_aspect_ratio = html.a`<button type="button">Reset aspect ratio to 1:1</button>` as HTMLButtonElement
     private reference_visible = html.a`<input type="checkbox" checked/>` as HTMLInputElement
-    private reference_opacity = html.a`<input type="range" min="0" max="1" step="0.01" value="0.35"/>` as HTMLInputElement
+    private reference_opacity = html.a`<input id="pad-reference-opacity" type="range" min="0" max="1" step="0.01" value="0.35"/>` as HTMLInputElement
     private reference_status = html.a`<div role="status" aria-live="polite"></div>`
-    private outline_width = html.a`<input type="range" min="0" max="0.5" step="0.01" value="0"/>` as HTMLInputElement
-    private outline_color = html.a`<input type="color" value="#000000"/>` as HTMLInputElement
-    private modifier = html.a`<select>${Object.keys(DECORATION_SHAPE_MODIFIER).map(it=>html.a`<option value="${it}">${it}</option>`)}<select/>` as HTMLInputElement
+    private outline_width = html.a`<input id="pad-outline-width" type="range" min="0" max="0.5" step="0.01" value="0"/>` as HTMLInputElement
+    private outline_color = html.a`<input id="pad-outline-color" type="color" value="#000000"/>` as HTMLInputElement
+    private modifier = html.a`<select>${Object.keys(DECORATION_SHAPE_MODIFIER).map(it=>html.a`<option value="${it}">${it}</option>`)}</select>` as HTMLSelectElement
     private modifier_strength = html.a`<input type="range" min="0" max="1" step="0.01" value="0"/>` as HTMLInputElement
 
     element = html.a/*html*/`
-        <div class="menu _vertical _scrollable form_container">
-            <label>Shape</label> ${this.shape}
-            <label>Modifier</label> ${this.modifier} ${this.modifier_strength}
-            <label>Pad Aspect Ratio</label> ${this.aspect_ratio}
-            ${this.use_reference_ratio} ${this.reset_aspect_ratio}
-            <label>Pad Size</label> ${this.size}
-            <label>${this.use_world_width} Use explicit 3D body width</label>
-            <label>Logical 3D body width</label> ${this.world_width} ${this.world_width_slider}
-            <small>Babylon.js units; body height is width ÷ aspect ratio. Leave unchecked to use legacy size.</small>
-            <label>Pad Gradient</label> ${this.top_color} ${this.bottom_color}
-            <label>Outline</label> ${this.outline_color} ${this.outline_width}
-            <label>Front face image</label> ${this.front_face} ${this.face_color}
-            <label>Texture translation X</label> ${this.face_x} ${this.face_x_slider}
-            <label>Texture translation Y</label> ${this.face_y} ${this.face_y_slider}
-            <label>Texture rotation (clockwise degrees)</label> ${this.face_rotation} ${this.face_rotation_slider}
-            <label>Texture uniform scale</label> ${this.face_scale} ${this.face_scale_slider}
-            ${this.reset_face_transform}
-            <label>${this.show_face_transform_overlay} Show 2D transform overlay</label>
-            ${this.face_transform_status}
-            <label>Design reference</label>
-            <label>${this.reference_visible} Show 2D reference overlay</label>
-            ${this.reference_opacity}
-            ${this.reference_status}
-            ${this.use_reference_texture}
+        <div class="wam-pad-settings form_container" aria-label="WAM pad properties">
+            <fieldset class="pad-settings-section">
+                <legend>Body shape</legend>
+                <div class="pad-setting">
+                    <label for="pad-shape">Shape</label>
+                    ${this.shape}
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-modifier">Shape modifier</label>
+                    <div class="pad-setting-controls">
+                        ${this.modifier}
+                        <label class="pad-range-label" for="pad-modifier-strength">Strength ${this.modifier_strength}</label>
+                    </div>
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-aspect-ratio">Aspect ratio</label>
+                    ${this.aspect_ratio}
+                    <div class="pad-setting-actions">${this.use_reference_ratio} ${this.reset_aspect_ratio}</div>
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-size">Pad size</label>
+                    ${this.size}
+                </div>
+            </fieldset>
+
+            <fieldset class="pad-settings-section">
+                <legend>3D dimensions</legend>
+                <label class="pad-setting-check">${this.use_world_width} Use explicit 3D body width</label>
+                <div class="pad-setting">
+                    <label for="pad-world-width">Logical body width</label>
+                    <div class="pad-setting-controls">${this.world_width} ${this.world_width_slider}</div>
+                    <small>Babylon.js units. Height is width ÷ aspect ratio. Turn this off to use legacy sizing.</small>
+                </div>
+            </fieldset>
+
+            <fieldset class="pad-settings-section">
+                <legend>Body appearance</legend>
+                <div class="pad-setting">
+                    <span class="pad-setting-label">Gradient colors</span>
+                    <div class="pad-setting-controls">
+                        <label for="pad-top-color">Top ${this.top_color}</label>
+                        <label for="pad-bottom-color">Bottom ${this.bottom_color}</label>
+                    </div>
+                </div>
+                <div class="pad-setting">
+                    <span class="pad-setting-label">Outline</span>
+                    <div class="pad-setting-controls">
+                        <label for="pad-outline-color">Color ${this.outline_color}</label>
+                        <label class="pad-range-label" for="pad-outline-width">Width ${this.outline_width}</label>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset class="pad-settings-section">
+                <legend>Front-face texture</legend>
+                <div class="pad-setting">
+                    <label for="pad-front-face">Image URL</label>
+                    ${this.front_face}
+                    <small>Optional image used on the 3D body's front face.</small>
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-face-color">Face tint</label>
+                    ${this.face_color}
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-face-x">Horizontal position (image widths)</label>
+                    <div class="pad-setting-controls">${this.face_x} ${this.face_x_slider}</div>
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-face-y">Vertical position (image heights)</label>
+                    <div class="pad-setting-controls">${this.face_y} ${this.face_y_slider}</div>
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-face-rotation">Rotation (clockwise degrees)</label>
+                    <div class="pad-setting-controls">${this.face_rotation} ${this.face_rotation_slider}</div>
+                </div>
+                <div class="pad-setting">
+                    <label for="pad-face-scale">Uniform scale</label>
+                    <div class="pad-setting-controls">${this.face_scale} ${this.face_scale_slider}</div>
+                </div>
+                <div class="pad-setting-actions">${this.reset_face_transform}</div>
+                <label class="pad-setting-check">${this.show_face_transform_overlay} Show transform outline in 2D view</label>
+                ${this.face_transform_status}
+            </fieldset>
+
+            <fieldset class="pad-settings-section">
+                <legend>Design reference</legend>
+                <label class="pad-setting-check">${this.reference_visible} Show reference over the 2D view</label>
+                <div class="pad-setting">
+                    <label for="pad-reference-opacity">Overlay opacity</label>
+                    ${this.reference_opacity}
+                </div>
+                ${this.reference_status}
+                <div class="pad-setting-actions">${this.use_reference_texture}</div>
+            </fieldset>
         </div>
     `
 
@@ -84,6 +155,18 @@ export class WamPadPane implements IContentRenderer{
         private readonly setFaceTransformOverlayVisible: (visible: boolean) => void = () => {},
     ){
         const pane = this
+        this.shape.id = "pad-shape"
+        this.modifier.id = "pad-modifier"
+        this.modifier_strength.id = "pad-modifier-strength"
+        this.size.id = "pad-size"
+        this.world_width_slider.setAttribute("aria-label", "Logical body width")
+        this.face_x_slider.setAttribute("aria-label", "Horizontal texture position")
+        this.face_y_slider.setAttribute("aria-label", "Vertical texture position")
+        this.face_rotation_slider.setAttribute("aria-label", "Texture rotation")
+        this.face_scale_slider.setAttribute("aria-label", "Texture uniform scale")
+        this.reference_opacity.setAttribute("aria-label", "Design reference overlay opacity")
+        this.modifier_strength.setAttribute("aria-label", "Shape modifier strength")
+        this.outline_color.setAttribute("aria-label", "Outline color")
 
         gui_generator.link(({to:gui})=>{
             gui.pad_shape.link(({to}) => pane.shape.value=to)

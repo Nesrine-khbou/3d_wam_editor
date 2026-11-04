@@ -5,7 +5,7 @@ import { ArcRotateCamera, Color4, Engine, Scene, TransformNode, Vector3 } from "
 
 export class WamGui3DPane implements IContentRenderer{
     
-    element = html.a`<div class="center_pane _contain"></div>`
+    element = html.a`<div class="center_pane"></div>`
     container: TransformNode
     readonly camera: ArcRotateCamera
     engine: Engine
@@ -36,7 +36,8 @@ export class WamGui3DPane implements IContentRenderer{
         this.camera.wheelPrecision = 100
         this.camera.lowerRadiusLimit = 0.25
         this.camera.upperRadiusLimit = 20
-        this.camera.attachControl()
+        this.camera.panningSensibility = 1000
+        this.camera.attachControl(false, false, 2)
         this.camera.setTarget(Vector3.Zero())
     
         this.container = new TransformNode("node_container", this.scene)
@@ -52,6 +53,13 @@ export class WamGui3DPane implements IContentRenderer{
 
     resetZoom(): void {
         this.camera.radius = 1.7
+    }
+
+    setCanvasZoom(zoom: number): void {
+        const size = `${Math.max(0.5, Math.min(3, zoom)) * 100}%`
+        this.element.style.width = size
+        this.element.style.height = size
+        this.engine.resize()
     }
 
     init(_: GroupPanelPartInitParameters): void {

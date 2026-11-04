@@ -13,11 +13,14 @@ export abstract class ParameterControl extends Control{
     declare fields_ids: string[]
 
     promise = Promise.resolve()
+    private fieldRevisions: number[]
+    private disposed = false
 
     constructor(factory: ControlFactory){
         super(factory)
         this.fields = Array.from((factory as ParameterControlFactory).getParameterLabels(), ()=>NoneFieldValue.INSTANCE)
         this.fields_ids = Array.from((factory as ParameterControlFactory).getParameterLabels(), ()=>"none")
+        this.fieldRevisions = this.fields.map(()=>0)
     }
 
     override updateValue(label: string, value: CSettingsValue){
@@ -26,14 +29,23 @@ export abstract class ParameterControl extends Control{
         for(const l of (this.factory as ParameterControlFactory).getParameterLabels()){
             if(label==l){
                 const newfield = fields[value as string] ?? NoneFieldValue.Factory.INSTANCE
-                this.fields[i].dispose()
+                const index = i
+                const revision = ++this.fieldRevisions[index]
+                if(this.fields[index] !== NoneFieldValue.INSTANCE) this.fields[index].dispose()
+                this.fields[index] = NoneFieldValue.INSTANCE
                 this.fields_ids[i] = value as string
-                ;(async()=>{
-                    this.fields[i] = await newfield.create(()=>{
-                        this.onParamChange(i)
-                    })
-                    this.onParamChange(i)
-                })()
+                void newfield.create(()=>{
+                    if(!this.disposed && revision === this.fieldRevisions[index]) this.onParamChange(index)
+                }).then(field=>{
+                    if(this.disposed || revision !== this.fieldRevisions[index]){
+                        field.dispose()
+                        return
+                    }
+                    this.fields[index] = field
+                    this.onParamChange(index)
+                }).catch(error=>{
+                    console.error(`Unable to bind widget parameter "${String(value)}"`, error)
+                })
                 break
             }
             i++
@@ -54,6 +66,21 @@ export abstract class ParameterControl extends Control{
         const field = this.fields[index]
         if(!field) return 0
         return FieldValueUtils.getNormalizedStepSize(field)
+    }
+
+    protected hasBoundParameter(index = 0): boolean {
+        return this.fields[index] !== undefined && this.fields[index] !== NoneFieldValue.INSTANCE
+    }
+
+    protected setNormalizedValue(value: number, index = 0): void {
+        const field = this.fields[index]
+        if(!field || field === NoneFieldValue.INSTANCE) return
+        const min = field.getMin()
+        const max = field.getMax()
+        const step = field.getStepSize()
+        let next = min + Math.max(0, Math.min(1, value)) * (max - min)
+        if(step > 0) next = min + Math.round((next - min) / step) * step
+        field.setValue(Math.max(min, Math.min(max, next)))
     }
 
     declareField<C,T>(target: ControlContextTarget<C,T>, mesh: T|(T[]), index: number=0){
@@ -92,7 +119,11 @@ export abstract class ParameterControl extends Control{
     }
 
     destroy(): void {
-        this.fields.forEach(f=>f?.dispose())
+        this.disposed = true
+        this.fieldRevisions = this.fieldRevisions.map(revision=>revision+1)
+        this.fields.forEach(f=>{
+            if(f && f !== NoneFieldValue.INSTANCE) f.dispose()
+        })
         this.env.sharedTemp.free(ControlShared.FIELDS)
     }
 

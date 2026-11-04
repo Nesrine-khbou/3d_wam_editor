@@ -192,8 +192,23 @@ export class WamGUIGenerator{
 
     async addControl(added: {control:ControlType, values:CSettingsValues, x:number, y:number, width:number, height:number}){
         const factory = await this.getFactory(added.control)
+        this.validateRenderTargets(factory, factory.definition?.id ?? "new widget")
         const control = await factory.create()
         this.controls.splice(this.controls.length, 0, {control, x:added.x, y:added.y, height:added.height, width:added.width, values:added.values})
+    }
+
+    private validateRenderTargets(factory: ControlFactory, descriptorId: string): void {
+        const definition = factory.definition
+        if(!definition) return
+        if(definition.id !== descriptorId){
+            throw new TypeError(`Widget factory "${definition.id}" cannot be loaded as descriptor type "${descriptorId}"`)
+        }
+        if(this.host.html && !definition.renderTargets.includes("html")){
+            throw new Error(`Widget "${definition.id}" does not support the HTML render target`)
+        }
+        if(this.host.babylonjs && !definition.renderTargets.includes("babylonjs")){
+            throw new Error(`Widget "${definition.id}" does not support the Babylon.js 3D render target`)
+        }
     }
 
     async getFactory(control_type: ControlType): Promise<ControlFactory>{
@@ -265,6 +280,43 @@ export class WamGUIGenerator{
             }
             normalizeFaceTransform(code.face_transform)
         }
+        const factories: ControlFactory[] = []
+        for(const {control} of code.controls){
+            const controlType = library?.[control]
+            if(typeof controlType !== "function"){
+                const available = Object.keys(library ?? {}).sort()
+                throw new Error(
+                    `Unknown widget type "${control}" in WAM GUI descriptor. ` +
+                    `Install a compatible widget catalog or map this type in the supplied library` +
+                    (available.length ? ` (available: ${available.join(", ")}).` : "."),
+                )
+            }
+            const factory = await this.getFactory(controlType)
+            this.validateRenderTargets(factory, control)
+            factories.push(factory)
+        }
+        const declaredWidgetFeatures = new Set(code.required_features ?? [])
+        const usedWidgetFeatures = new Set(
+            factories.map(factory => factory.definition?.featureId).filter((feature): feature is string => feature !== undefined),
+        )
+        for(const factory of factories){
+            const definition = factory.definition
+            const feature = definition?.featureId
+            if(!feature) continue
+            if(schemaVersion !== 2 || !declaredWidgetFeatures.has(feature)){
+                throw new TypeError(
+                    `Widget "${definition.id}" requires schema_version: 2 and the "${feature}" required feature declaration`,
+                )
+            }
+        }
+        for(const feature of declaredWidgetFeatures){
+            if(feature.startsWith("wam3dgenerator.widget.") && !usedWidgetFeatures.has(feature)){
+                throw new Error(
+                    `Unsupported required widget feature "${feature}". ` +
+                    "Install a compatible widget catalog that implements this widget.",
+                )
+            }
+        }
         this.descriptorSchemaVersion = schemaVersion
         this.requiredFeatures = [...(code.required_features ?? [])]
         this.editorFeatures = [...(code.editor_features ?? [])]
@@ -290,8 +342,9 @@ export class WamGUIGenerator{
         this.modifier.value = code.modifier ?? "normal"
         this.modifier_strength.value = code.modifier_strength ?? 0
         this.controls.splice(0,this.controls.length)
-        for(let {control,values,x,y,width,height} of code.controls){
-            const instance = await (await this.getFactory(library[control])).create()
+        for(let i=0; i<code.controls.length; i++){
+            const {control,values,x,y,width,height} = code.controls[i]
+            const instance = await factories[i].create()
             this.controls.splice(this.controls.length, 0, {control:instance, values, x, y, width, height})
         }
     }
@@ -338,23 +391,27 @@ export class WamGUIGenerator{
                 else return null
             }).filter(it=>it!=null)
         }
-        if(this.descriptorSchemaVersion === 2 || this.world_width.value !== null){
+        const widgetFeatures = this.controls.values
+            .map(({control})=>control.factory.definition?.featureId)
+            .filter((feature): feature is string => feature !== undefined)
+        const requiredFeatures = [...new Set([...this.requiredFeatures, ...widgetFeatures])]
+        if(this.descriptorSchemaVersion === 2 || this.world_width.value !== null || widgetFeatures.length > 0){
             descriptor.schema_version = 2
-            descriptor.required_features = [...this.requiredFeatures]
+            descriptor.required_features = requiredFeatures
             descriptor.editor_features = [...this.editorFeatures]
         }
         if(this.world_width.value !== null){
             descriptor.schema_version = 2
             descriptor.world_width = this.world_width.value
             descriptor.required_features = [...new Set([
-                ...this.requiredFeatures,
+                ...requiredFeatures,
                 WAM_GUI_FEATURES.worldWidth,
             ])]
         }
         if(this.faceTransformExplicit){
             descriptor.schema_version = 2
             descriptor.required_features = [...new Set([
-                ...this.requiredFeatures,
+                ...requiredFeatures,
                 WAM_GUI_FEATURES.faceTransform,
             ])]
             descriptor.face_transform = this.faceTransformEdited

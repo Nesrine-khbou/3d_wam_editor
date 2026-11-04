@@ -13,6 +13,7 @@ export class ControlStateManager{
     constructor(controls: ControlMap){
         const name_map = new Map<string,number>()
         for(const {control} of controls.values){
+            if(control.factory.definition?.statePersistence === false) continue
             if(control.getState && control.setState && control.getStateName){
                 const name = control.getStateName()
                 const count = name_map.get(name) ?? 1

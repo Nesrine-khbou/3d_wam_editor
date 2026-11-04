@@ -433,6 +433,8 @@ h3{
 }
 
 .design-workspace__zoom-controls{
+    position: relative;
+    z-index: 5;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -524,6 +526,42 @@ h3{
     overflow: hidden;
 }
 
+.design-workspace__2d-viewport,
+.design-workspace__3d-viewport{
+    min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+}
+
+.design-workspace__2d-viewport > .editor_pane,
+.design-workspace__3d-viewport > .center_pane{
+    flex: none;
+    min-width: 100%;
+    min-height: 100%;
+}
+
+.design-workspace__2d-viewport .container{
+    box-sizing: border-box;
+    margin: 0;
+    overflow: visible;
+}
+
+.design-workspace__3d-viewport canvas.container{
+    box-sizing: border-box;
+    margin: 0;
+    overflow: hidden;
+}
+
+.design-workspace__3d-viewport{
+    background: #1b263b;
+}
+
+.design-workspace__preview{
+    background: #1b263b;
+}
+
 .design-workspace__divider{
     z-index: 4;
     cursor: col-resize;
@@ -548,6 +586,22 @@ h3{
     background-image:
         linear-gradient(to right, rgba(90, 160, 255, .9) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(90, 160, 255, .9) 1px, transparent 1px);
+}
+
+.wam-boolean-control{
+    border: 2px solid #252a31;
+    box-shadow: inset 0 1px 2px #ffffff44, 0 2px 4px #00000066;
+    transition: background-color .12s ease, transform .08s ease;
+}
+
+.wam-boolean-control:focus-visible{
+    outline: 2px solid var(--select-hover);
+    outline-offset: 2px;
+}
+
+.wam-numeric-display{
+    line-height: 1.15;
+    text-shadow: 0 0 5px #9effa888;
 }
 
 @media (max-width: 700px){
@@ -584,8 +638,6 @@ h3{
         background-color: var(--select2);
         cursor: move;
         pointer-events: all;
-        transform: scale(var(--editor-zoom-inverse, 1));
-        transform-origin: center;
         &:hover{ background-color: var(--select-hover); }
         &._dragged{ background-color: var(--select-hover); scale:1.5; }
         &._1{ left: -.4rem; top: -.4rem; }
@@ -638,13 +690,11 @@ h3{
     height: fit-content;
     width: 100vw;
     box-sizing: border-box;
-    
     list-style: none;
     display: flex;
     flex-direction: row;
     padding-left: 1rem;
     padding-right: 1rem;
-
     background-color: var(--backback);
 
     >*{
@@ -656,39 +706,207 @@ h3{
         min-width: 5rem;
         margin: 0;
         padding: .1rem;
+
         >span{
             display: block;
             padding: .2rem;
             cursor: pointer;
             text-wrap: nowrap;
         }
+
         >ul{
             position: absolute;
             top: 100%;
             left: 0;
             z-index: 1;
-
             display: none;
             flex-direction: column;
             list-style: none;
             padding: 0;
             background-color: var(--backback);
             box-shadow: 0 .1rem .1rem rgba(0,0,0,.5);
+
             >li>ul{
                 left: 100%;
                 top: 0;
             }
+
             >li:has(ul){
                 border-right: .1rem solid var(--text);
             }
         }
+
         &:hover{
             >span{
                 background-color: var(--back);
             }
+
             >ul{
                 display: flex;
             }
         }
+    }
+}
+
+.wam-pad-settings{
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: .75rem;
+    background: #1b263b;
+}
+
+.pad-settings-section{
+    box-sizing: border-box;
+    min-width: 0;
+    margin: 0;
+    padding: .65rem;
+    border: 1px solid rgba(119, 207, 255, .7);
+    border-radius: .6rem;
+    background: #23324a;
+    box-shadow: 0 .15rem .4rem rgba(0, 0, 0, .28);
+}
+
+.pad-settings-section legend{
+    padding: .15rem .45rem;
+    border-radius: .3rem;
+    background: #2b466e;
+    color: #fff;
+    font-size: .9rem;
+    font-weight: 700;
+}
+
+.pad-setting{
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    min-width: 0;
+    margin: .45rem 0;
+}
+
+.pad-settings-section .pad-setting > label,
+.pad-settings-section .pad-setting-label{
+    margin: 0;
+    color: var(--text);
+    font-size: .78rem;
+    font-weight: 600;
+}
+
+.pad-setting-controls,
+.pad-setting-actions{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .5rem;
+    min-width: 0;
+}
+
+.pad-setting-controls > *{
+    box-sizing: border-box;
+    max-width: 100%;
+}
+
+.pad-setting-controls > input[type="range"]{
+    flex: 1 1 7rem;
+    min-width: 5rem;
+    margin: 0;
+}
+
+.pad-setting-controls > input[type="number"]{
+    flex: 0 0 6rem;
+    width: 6rem;
+    margin: 0;
+}
+
+.pad-setting-controls > select,
+.pad-setting > select{
+    box-sizing: border-box;
+    max-width: 100%;
+    margin: 0;
+}
+
+.pad-setting > input[type="text"]{
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.pad-setting-controls > label{
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    font-size: .75rem;
+}
+
+.pad-range-label{
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+}
+
+.pad-range-label input[type="range"]{
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+}
+
+.pad-setting-actions button{
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    margin: 0;
+}
+
+.pad-setting-check{
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin: .45rem 0;
+    font-size: .78rem;
+}
+
+.pad-setting-check input{
+    margin: 0;
+}
+
+.pad-settings-section small{
+    color: rgba(255, 255, 255, .72);
+    font-size: .7rem;
+    line-height: 1.4;
+}
+
+.pad-settings-section [role="status"]{
+    overflow-wrap: anywhere;
+    margin: .4rem 0;
+    padding: .45rem;
+    border-left: 2px solid var(--alt);
+    background: rgba(20, 20, 20, .35);
+    font-size: .72rem;
+    line-height: 1.4;
+}
+
+.pad-settings-section [role="status"]:empty{
+    display: none;
+}
+
+.pad-settings-section [aria-invalid="true"]{
+    outline: 2px solid #ff7b72;
+}
+
+@media (max-width: 420px){
+    .wam-pad-settings{
+        padding: .45rem;
+    }
+
+    .pad-settings-section{
+        padding: .5rem;
     }
 }

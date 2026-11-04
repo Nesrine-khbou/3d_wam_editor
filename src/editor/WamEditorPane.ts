@@ -22,7 +22,7 @@ import { svgFaceTransform } from "../utils/visual/faceTransform.ts";
 export class WamEditorPane implements IContentRenderer{
 
     container = html.a`<div class=container></div>`
-    element = html.a`<div class="editor_pane center_pane _contain">${this.container}</div>`
+    element = html.a`<div class="editor_pane center_pane">${this.container}</div>`
     private reference_overlay = html.a`<div aria-hidden="true"></div>`
     private grid_overlay = html.a`<div class="editor-grid" aria-hidden="true"></div>`
     private marquee = html.a`<div class="selection-marquee" aria-hidden="true"></div>`
@@ -51,7 +51,7 @@ export class WamEditorPane implements IContentRenderer{
             display: flex;
             aspect-ratio: 1/1;
             width: 100%;
-            overflow: hidden;
+            overflow: visible;
             position: relative;
             transform: scale(1);
             transform-origin: center center;
@@ -210,13 +210,6 @@ export class WamEditorPane implements IContentRenderer{
     setFaceTransformOverlayVisible(visible: boolean): void {
         this.showFaceTransformOverlay = visible
         this.updateFaceTransformOverlay()
-    }
-
-    setZoom(zoom: number): void {
-        const scale = clampWorkspaceZoom(zoom)
-        this.container.style.setProperty("--editor-zoom", scale.toString())
-        this.container.style.setProperty("--editor-zoom-inverse", (1 / scale).toString())
-        this.container.style.transform = `scale(${scale})`
     }
 
     private getGridSnapSettings(): GridSnapSettings {

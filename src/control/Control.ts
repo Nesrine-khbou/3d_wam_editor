@@ -223,9 +223,35 @@ export interface ControlFactory{
     /** The default values of the settings. */
     getDefaultValues(): CSettingsValues
 
+    /** Stable catalog metadata; omitted only for legacy third-party factories. */
+    definition?: WidgetDefinition
+
     /** Create the control. */
     create(): Promise<Control>
     
+}
+
+export type WidgetRenderTarget = "html" | "babylonjs"
+export type WidgetBehavior =
+    | "continuous-parameter"
+    | "toggle-parameter"
+    | "momentary-parameter"
+    | "read-only-display"
+    | "connection"
+    | "decoration"
+
+export interface WidgetDefinition {
+    /** Stable descriptor/catalog identifier. */
+    id: string
+    behavior: WidgetBehavior
+    /** Visual implementation identifier, independent of parameter behavior. */
+    skin: string
+    /** Targets this widget actually renders to. Empty/omitted targets are unsupported. */
+    renderTargets: readonly WidgetRenderTarget[]
+    /** Required V2 descriptor feature when this widget is serialized. */
+    featureId?: string
+    /** False for observers whose source is live data rather than widget-owned state. */
+    statePersistence?: boolean
 }
 
 /** A type of control. */

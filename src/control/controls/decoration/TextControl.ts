@@ -29,6 +29,7 @@ export class TextControl extends Control{
     }
 
     private element?: HTMLElement
+    private resizeObserver?: ResizeObserver
     
     createElement(){
         this.element = document.createElement("div")
@@ -39,12 +40,17 @@ export class TextControl extends Control{
         this.element.style.justifyContent="center"
         this.element.style.alignItems="center"
         this.element.style.textWrap="noWrap"
-        const onresize = new ResizeObserver(()=>this.element!!.style.fontSize=this.element!!.clientHeight+"px")
-        onresize.observe(this.element)
+        const element = this.element
+        this.resizeObserver = new ResizeObserver(() => {
+            if(this.element === element) element.style.fontSize = element.clientHeight + "px"
+        })
+        this.resizeObserver.observe(element)
         return this.element
     }
 
     destroyElement(){
+        this.resizeObserver?.disconnect()
+        this.resizeObserver = undefined
         this.element?.remove()
         this.element=undefined
     }

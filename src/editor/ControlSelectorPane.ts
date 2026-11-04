@@ -46,15 +46,19 @@ export class ControlSelectorPane implements IContentRenderer{
             for(let [key,control_type] of Object.entries(this.controls)){
                 let factory = await generator.getFactory(control_type)
                 let example = await factory.create()
+                example.setDefaultValues()
                 let element = example.createElement()
+                const preview = element.cloneNode(true) as HTMLElement
+                example.destroy()
+                example.destroyElement()
+                example.destroyNode()
                 let option = list.appendChild(html.a`
                     <li value="${key}" title="${factory.description}">
-                        <div class="-icon">${element}</div>
+                        <div class="-icon">${preview}</div>
                         <span class="-label">${factory.label}</span>
                     </li>
                 `)
                 if(key == selected_key)to_select = option
-                example.setDefaultValues()
                 option.onclick=()=>setControl(key)
             }
 
