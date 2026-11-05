@@ -165,6 +165,17 @@ This is the persistent handoff log for feature work in this project. Read it bef
 - **Known pitfalls:** Assign a real WAM parameter to the rotary before expecting value changes. 3D parameter adjustment requires clicking the rotary mesh and dragging vertically; the viewer's right mouse button pans the camera.
 - **Next step:** None.
 
+#### Feature: Realistic 3D WAM authoring tools
+
+- **Status:** Planned
+- **Goal:** Specify a path from the current textured-body/predefined-widget editor to a general 3D scene authoring workflow with model assets, materials, component interactions, WAM bindings, and compatible runtime export.
+- **Progress:** Created `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` with the current capability gap, author workflow, descriptor/runtime constraints, ordered implementation tasks, and release acceptance criteria. This is a specification only; no authoring or runtime functionality was implemented.
+- **Relevant files:** `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` (proposed feature requirements and task breakdown); `EDITOR_V2_SPECIFICATION.md` (current descriptor and runtime compatibility background).
+- **Decisions and constraints:** Scope is general-purpose authoring with original or properly authorized assets. An editor-only 2D reference cannot substitute for actual geometry. Existing legacy descriptors and predefined widgets must remain compatible; any new runtime behavior must be implemented and integration-tested in the consuming runtime.
+- **Validation:** Documentation-only change; not run.
+- **Known pitfalls:** Fidelity depends on the geometry, material assets, measurements, and WAM endpoints supplied. Editor preview alone does not establish consumer-runtime compatibility.
+- **Next step:** Begin Task 0 in `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` before implementing features.
+
 ### Feature entry template
 
 Copy this section for each new feature. Keep the feature name stable when updating it in later sessions.
