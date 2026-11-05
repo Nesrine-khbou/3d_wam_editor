@@ -268,6 +268,49 @@ Candidate portable project envelope (not yet a consumer-approved runtime descrip
 1.4. Test legacy descriptors, malformed hierarchies, unknown required features, optional-data preservation, and round-trips.  
 1.5. Add a serialized fixture containing only editor-neutral data; no renderer object may appear in it.
 
+#### Task 1 implementation record (2026-11-05)
+
+- **1.1 Typed model:** Added the renderer-independent `WamGuiSceneDocument` contract. Scene nodes use stable IDs, explicit parent IDs, local position/Euler-rotation/scale tuples, visibility and lock flags, and the five required node kinds. The scene identifies coordinate system `wam3d-editor-lh-y-up-meter-v1` and transform convention `wam3dgenerator.trs-rz-ry-rx-radians.v1`. The model also types project-relative asset records and mesh/node selectors, material records/references, parameter/event endpoints and mappings, primitive parameters, and interactive pivot/axis data. It contains no Babylon.js or DOM types.
+- **1.2 Validation and migration boundary:** Added strict scene normalization for schema version 1. The coordinate system is left-handed, +Y up, +X right, +Z forward, and one unit represents one meter. Transforms are local TRS; position is in scene units, rotation is XYZ Euler in radians composed as `Rz * Ry * Rx` (X applied first), and local points are scaled, rotated, then translated. Root nodes have no parent and default to identity transform; omitted node transforms normalize to identity, visibility defaults true and lock defaults false. IDs must be unique and stable; parent and asset/material references must resolve; parent cycles, invalid vectors/scales, invalid URI traversal, unsupported node/primitive/behavior types, and invalid binding ranges fail with actionable errors. Unknown optional properties are retained. The scene is an additive field on WAM GUI schema version 2 and requires `wam3dgenerator.scene-graph.v1`; scene data on a legacy descriptor is rejected. Compatibility validation rejects required features not declared supported by the caller.
+- **1.3 Load/save/history:** `WamGUIGenerator.load` validates the descriptor and scene before changing current document state, then records the normalized scene independently of renderer objects. `save` validates and serializes that scene and declares the required feature. Since the existing `DocumentHistory` captures `WamGUIGenerator.save()` and restores with `load()`, scene edits are part of the existing undo/redo snapshots. A failed scene load leaves the current descriptor intact.
+- **1.4 Tests:** Added tests for legacy descriptors, schema and feature declarations, malformed graph structure and references, non-finite/zero transforms, binding validation, optional extension preservation, descriptor round-trips, atomic failed loads, and scene undo/redo.
+- **1.5 Editor-neutral fixture:** Added `test/fixtures/scene-document.v1.json`, containing only JSON data (hierarchy, mesh references, materials, a parameter binding and optional extension data). A test asserts that its normalized/serialized shape contains no Babylon runtime object references.
+
+The descriptor shape used by this model is:
+
+```json
+{
+  "schema_version": 2,
+  "required_features": ["wam3dgenerator.scene-graph.v1"],
+  "scene": {
+    "schema_version": 1,
+    "coordinate_system": "wam3d-editor-lh-y-up-meter-v1",
+    "transform_convention": "wam3dgenerator.trs-rz-ry-rx-radians.v1",
+    "assets": [{
+      "id": "instrument-model",
+      "uri": "assets/instrument.glb",
+      "media_type": "model/gltf-binary"
+    }],
+    "materials": [{ "id": "panel-material", "name": "Panel" }],
+    "nodes": [{
+      "id": "body",
+      "name": "Body",
+      "kind": "imported_mesh",
+      "parent": null,
+      "transform": {
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1]
+      },
+      "asset": { "asset_id": "instrument-model", "node": "body", "mesh": "body-mesh" },
+      "material_refs": [{ "material_id": "panel-material" }]
+    }]
+  }
+}
+```
+
+**Task 1 status:** 1.1–1.5 are implemented and covered by automated tests. The feature ID is a required descriptor declaration only; this does not claim that the external companion runtime supports rendering the scene. The companion-runtime approval/integration blocker recorded under Task 0 still applies.
+
 ### Task 2 — Portable model and texture asset pipeline
 
 2.1. Implement GLB/glTF import with explicit progress, cancellation, and user-visible errors.  

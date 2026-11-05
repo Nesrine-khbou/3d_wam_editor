@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "coordinate_system": "wam3d-editor-lh-y-up-meter-v1",
+  "transform_convention": "wam3dgenerator.trs-rz-ry-rx-radians.v1",
+  "assets": [
+    {
+      "id": "instrument-model",
+      "uri": "assets/instrument.glb",
+      "media_type": "model/gltf-binary"
+    }
+  ],
+  "materials": [
+    {
+      "id": "panel-material",
+      "name": "Panel",
+      "vendor_data": {
+        "finish": "satin"
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "instrument-root",
+      "name": "Instrument",
+      "kind": "group",
+      "parent": null
+    },
+    {
+      "id": "panel",
+      "name": "Panel",
+      "kind": "imported_mesh",
+      "parent": "instrument-root",
+      "transform": {
+        "position": [0, 0, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1],
+        "vendor_data": {
+          "unit_hint": "meters"
+        }
+      },
+      "asset": {
+        "asset_id": "instrument-model",
+        "node": "body",
+        "mesh": "body-mesh"
+      },
+      "material_refs": [{ "material_id": "panel-material" }],
+      "vendor_metadata": {
+        "source_part": "panel-main"
+      }
+    },
+    {
+      "id": "volume-knob",
+      "name": "Volume",
+      "kind": "interactive",
+      "parent": "panel",
+      "interaction": {
+        "behavior": "rotary",
+        "pivot": [0, 0.1, 0],
+        "axis": [0, 1, 0],
+        "binding": {
+          "endpoint_id": "volume",
+          "endpoint_type": "parameter",
+          "label": "Volume",
+          "mapping": {
+            "minimum": 0,
+            "maximum": 1,
+            "step": 0.01,
+            "default": 0.5
+          }
+        }
+      }
+    },
+    {
+      "id": "brand-label",
+      "name": "Panel label",
+      "kind": "visual",
+      "visual_type": "text",
+      "parent": "panel",
+      "material_refs": [{ "material_id": "panel-material" }]
+    },
+    {
+      "id": "stand",
+      "name": "Instrument stand",
+      "kind": "primitive",
+      "parent": "instrument-root",
+      "geometry": {
+        "type": "box",
+        "parameters": {
+          "width": 1,
+          "height": 0.1,
+          "depth": 0.2
+        }
+      }
+    }
+  ],
+  "vendor_extension": {
+    "preserve": [true, "optional", 3]
+  }
+}

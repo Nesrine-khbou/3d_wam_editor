@@ -1,9 +1,13 @@
+import { normalizeWamGuiScene, WAM_GUI_SCENE_FEATURE } from "./WamGuiScene.ts";
+import type { WamGuiSceneDocument } from "./WamGuiScene.ts";
+
 export const WAM_GUI_SCHEMA_VERSION = 2 as const
 
 export const WAM_GUI_FEATURES = Object.freeze({
     designReference: "wam3dgenerator.editor.design-reference.v1",
     worldWidth: "wam3dgenerator.world-width.v1",
     faceTransform: "wam3dgenerator.face-transform.v1",
+    sceneGraph: WAM_GUI_SCENE_FEATURE,
 })
 
 export interface DescriptorCompatibilityOptions {
@@ -28,6 +32,7 @@ export interface NormalizedWamGuiDescriptorCompatibility {
         rotation_degrees: number
         scale: number
     }
+    scene: WamGuiSceneDocument | null
     descriptor: Record<string, unknown>
 }
 
@@ -37,6 +42,7 @@ const V2_FIELDS = [
     "design_reference",
     "world_width",
     "face_transform",
+    "scene",
 ] as const
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -162,6 +168,11 @@ export function normalizeWamGuiDescriptorCompatibility(
         throw new RangeError("world_width must be greater than 0")
     }
     const faceTransform = readFaceTransform(descriptor.face_transform)
+    const scene = descriptor.scene === undefined ? null : normalizeWamGuiScene(descriptor.scene)
+    if (scene !== null) {
+        if (schemaVersion !== 2) throw new TypeError("scene requires schema_version: 2")
+        requireFeature(requiredFeatures, WAM_GUI_FEATURES.sceneGraph, "scene")
+    }
 
     if (designReference !== null) {
         requireFeature(editorFeatures, WAM_GUI_FEATURES.designReference, "design_reference")
@@ -193,6 +204,7 @@ export function normalizeWamGuiDescriptorCompatibility(
         designReference,
         worldWidth,
         faceTransform,
+        scene,
         descriptor: { ...descriptor },
     }
 }

@@ -2,11 +2,13 @@ import { TransformNode } from "@babylonjs/core";
 import { WebAudioModule } from "@webaudiomodules/api";
 import { ControlMap } from "./control/ControlMap.ts";
 import { MOValue } from "./observable/collections/OValue.ts";
-import { ControlEnv, ControlFactory, ControlHost, ControlType } from "./control/Control.ts";
+import { Control, ControlEnv, ControlFactory, ControlHost, ControlType } from "./control/Control.ts";
 import { Decoration } from "./utils/visual/Decoration.ts";
 import { CSettingsValues } from "./control/controls/settings/settings.ts";
 import { ShareMap } from "./control/ShareMap.ts";
-import { WAM_GUI_FEATURES } from "./descriptor/WamGuiDescriptor.ts";
+import { normalizeWamGuiDescriptorCompatibility, WAM_GUI_FEATURES } from "./descriptor/WamGuiDescriptor.ts";
+import { normalizeWamGuiScene } from "./descriptor/WamGuiScene.ts";
+import type { WamGuiSceneDocument } from "./descriptor/WamGuiScene.ts";
 import { DEFAULT_FACE_TRANSFORM, normalizeFaceTransform } from "./utils/visual/faceTransform.ts";
 import type { FaceTransform } from "./utils/visual/faceTransform.ts";
 
@@ -67,6 +69,7 @@ export class WamGUIGenerator{
     readonly size = new MOValue(.8)
     readonly aspect_ratio = new MOValue(1)
     readonly world_width = new LogicalWorldWidthValue(null)
+    readonly scene_document = new MOValue<WamGuiSceneDocument|null>(null)
     private descriptorSchemaVersion: 1 | 2 = 1
     private requiredFeatures: string[] = []
     private editorFeatures: string[] = []
@@ -317,9 +320,31 @@ export class WamGUIGenerator{
                 )
             }
         }
+        const compatibility = normalizeWamGuiDescriptorCompatibility(code, {
+            supportedRuntimeFeatures: [
+                WAM_GUI_FEATURES.worldWidth,
+                WAM_GUI_FEATURES.faceTransform,
+                WAM_GUI_FEATURES.sceneGraph,
+                ...usedWidgetFeatures,
+            ],
+            supportedEditorFeatures: code.editor_features ?? [],
+        })
+        const createdControls: Control[] = []
+        try{
+            for(const factory of factories){
+                createdControls.push(await factory.create())
+            }
+        }catch(error){
+            for(const control of createdControls) control.destroy()
+            throw error
+        }
+
         this.descriptorSchemaVersion = schemaVersion
         this.requiredFeatures = [...(code.required_features ?? [])]
         this.editorFeatures = [...(code.editor_features ?? [])]
+        this.scene_document.value = compatibility.scene === null
+            ? null
+            : structuredClone(compatibility.scene)
         this.loadingFaceTransform = true
         try{
             this.face_transform.value = normalizeFaceTransform(code.face_transform ?? DEFAULT_FACE_TRANSFORM)
@@ -344,8 +369,7 @@ export class WamGUIGenerator{
         this.controls.splice(0,this.controls.length)
         for(let i=0; i<code.controls.length; i++){
             const {control,values,x,y,width,height} = code.controls[i]
-            const instance = await factories[i].create()
-            this.controls.splice(this.controls.length, 0, {control:instance, values, x, y, width, height})
+            this.controls.splice(this.controls.length, 0, {control:createdControls[i], values, x, y, width, height})
         }
     }
 
@@ -371,6 +395,9 @@ export class WamGUIGenerator{
      * @returns the 3DWam GUI descriptor
      */
     save(library: ControlLibrary): WamGUICode{
+        const sceneDocument = this.scene_document.value === null
+            ? null
+            : normalizeWamGuiScene(this.scene_document.value)
         const descriptor: WamGUICode = {
             aspect_ratio: this.aspect_ratio.value,
             size: this.size.value,
@@ -391,11 +418,18 @@ export class WamGUIGenerator{
                 else return null
             }).filter(it=>it!=null)
         }
+        if(sceneDocument !== null){
+            descriptor.scene = sceneDocument
+        }
         const widgetFeatures = this.controls.values
             .map(({control})=>control.factory.definition?.featureId)
             .filter((feature): feature is string => feature !== undefined)
-        const requiredFeatures = [...new Set([...this.requiredFeatures, ...widgetFeatures])]
-        if(this.descriptorSchemaVersion === 2 || this.world_width.value !== null || widgetFeatures.length > 0){
+        const requiredFeatures = [...new Set([
+            ...this.requiredFeatures,
+            ...widgetFeatures,
+            ...(sceneDocument === null ? [] : [WAM_GUI_FEATURES.sceneGraph]),
+        ])]
+        if(this.descriptorSchemaVersion === 2 || this.world_width.value !== null || widgetFeatures.length > 0 || sceneDocument !== null){
             descriptor.schema_version = 2
             descriptor.required_features = requiredFeatures
             descriptor.editor_features = [...this.editorFeatures]
@@ -460,6 +494,7 @@ export interface WamGUICode{
         rotation_degrees?: number,
         scale?: number,
     },
+    scene?: WamGuiSceneDocument,
     shape?: string,
     outline_width?: number,
     outline_color?: string,
