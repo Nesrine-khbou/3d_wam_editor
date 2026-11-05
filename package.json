@@ -7,7 +7,7 @@
     "dev": "vite dev --port 5172",
     "expose": "vite dev --port 5172 --host",
     "build": "tsc && vite build",
-    "test": "npm run lib && node --test test/legacy-example-compatibility.test.mjs test/v2-descriptor-contract.test.mjs test/thumbnail-reference.test.mjs test/editor-interactions.test.mjs test/document-history.test.mjs test/face-transform.test.mjs test/widget-catalog.test.mjs",
+    "test": "npm run lib && node --test test/legacy-example-compatibility.test.mjs test/v2-descriptor-contract.test.mjs test/thumbnail-reference.test.mjs test/editor-interactions.test.mjs test/document-history.test.mjs test/face-transform.test.mjs test/widget-catalog.test.mjs test/glb-proof-of-concept.test.mjs",
     "preview": "vite preview",
     "lib": "vite build -c vite_lib.config.js",
     "postinstall": "npm run lib"
@@ -16,7 +16,8 @@
     "typescript": "~5.7.2"
   },
   "dependencies": {
-    "@babylonjs/core": "^8.24.0",
+    "@babylonjs/core": "8.24.0",
+    "@babylonjs/loaders": "8.24.0",
     "@webaudiomodules/api": "^2.0.0-alpha.6",
     "@webaudiomodules/sdk": "^0.0.12",
     "dockview-core": "^4.2.1",

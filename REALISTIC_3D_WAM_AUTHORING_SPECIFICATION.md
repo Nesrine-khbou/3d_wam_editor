@@ -1,6 +1,6 @@
 # Realistic 3D WAM Authoring Specification
 
-**Status:** Proposed; no implementation work is included in this specification.  
+**Status:** Task 0 feasibility spike implemented; companion-runtime contract approval remains pending.
 **Audience:** Editor, rendering, descriptor, and companion-runtime developers.  
 **Scope:** General-purpose creation of realistic 3D instrument interfaces from original or properly authorized assets. This specification does not authorize or describe copying a third-party product's protected design, branding, artwork, or model.
 
@@ -229,6 +229,36 @@ Tasks are ordered to reduce rework. Each task includes focused automated tests. 
 0.6. Produce a small proof-of-concept that imports, displays, selects, saves, reloads, and disposes one authorized model without altering legacy projects.
 
 **Exit criteria:** A documented descriptor draft and a passing test fixture demonstrate portable load/save and clean disposal. No user-facing feature work proceeds until scale, packaging, and runtime contracts are agreed.
+
+#### Task 0 spike record (2026-11-05)
+
+This is a non-user-facing feasibility result, not a released scene feature or a final runtime contract.
+
+- **0.1 Loader and fixture:** The editor and the maintained `@babylonjs/loaders` GLTF plugin are pinned to Babylon.js `8.24.0`. The `test/glb-proof-of-concept.test.mjs` fixture is generated locally for this project; it contains an authored hierarchy, two meshes, a glTF metallic/roughness material, and an embedded PNG texture. The test imports it through the real loader into a Babylon.js `NullEngine` scene and checks scene membership, hierarchy, material, and texture objects.
+- **0.2 Coordinate and identity draft:** The candidate project coordinate ID is `wam3d-editor-lh-y-up-meter-v1`: left-handed, +Y up, +X right, +Z forward, with one scene unit representing one meter. GLB is imported through Babylon's glTF loader into the editor's existing left-handed scene; no silent user scale or orientation option is applied. The model root remains at identity. A runtime model-node ID is the SHA-256 ID of the exact GLB plus its Babylon imported mesh index. This ID is scoped to an unchanged asset and is not a replacement for final scene-node IDs.
+- **0.3 Portable project draft:** The spike uses a single `.wam3d.json`-shaped project document with the GLB bytes embedded as base64 and referenced by their SHA-256 asset ID. It needs no local path, temporary URL, network fetch, or external project asset. The final package extension and external-resource policy still require companion-runtime agreement; the prototype format is intentionally isolated from existing WAM GUI descriptors.
+- **0.4 Ownership and feature negotiation:** The proposed boundary is that the editor owns authoring, asset validation, and project packaging; the companion owns runtime rendering, interaction, WAM parameter/event routing, and disposal. Proposed feature IDs are `wam3dgenerator.scene-graph.v1` and `wam3dgenerator.asset.glb.v1`. The WAM Jam Party consumer is not present in this checkout, so its owner has not confirmed the boundary or IDs. These IDs are drafts only and are not emitted in legacy descriptors or advertised as runtime support. Obtain consumer-owner approval and run its integration test before claiming Task 0 exit criteria complete.
+- **0.5 Asset policy and limits:** Import only original or otherwise authorized assets; the tool must not fetch, extract, or package content from third-party WAMs without permission. The spike accepts GLB 2.0 with embedded resources and no required glTF extensions. It rejects external resource URIs, unsupported required extensions, malformed files, files larger than 25 MiB, models with more than 250 renderable meshes, and models exceeding 100,000 vertices, with explicit errors instead of truncation. Missing/unembedded dependencies fail before the project is changed. These are initial spike budgets, not production performance guarantees.
+- **0.6 Proof of concept:** `src/scene/GlbProofOfConcept.ts` imports a model into a Babylon scene, allows a mesh to be selected by stable asset-scoped ID, serializes the original GLB into a portable project document, reloads it with integrity checking, and disposes the `AssetContainer`. The automated fixture also checks failed imports, integrity errors, and unknown selections. It does not alter `WamGUIGenerator` or legacy descriptors.
+
+Candidate portable project envelope (not yet a consumer-approved runtime descriptor):
+
+```json
+{
+  "format": "wam3d-glb-poc",
+  "version": 1,
+  "coordinate_system": "wam3d-editor-lh-y-up-meter-v1",
+  "assets": [{
+    "id": "glb-<sha256-of-exact-glb-bytes>",
+    "file_name": "instrument.glb",
+    "content_type": "model/gltf-binary",
+    "data_base64": "<embedded-glb-bytes>"
+  }],
+  "selected_node_id": "glb-<sha256-of-exact-glb-bytes>/mesh/<imported-mesh-index>"
+}
+```
+
+**Task 0 status:** 0.1, 0.2, 0.3, 0.5, and the isolated 0.6 spike have candidate implementations/documentation and automated coverage. 0.4 remains awaiting approval from the external runtime owner. Consequently the formal exit criteria are not yet fully met; do not begin user-facing scene-authoring or runtime feature work until that approval, package contract, and consumer integration test are complete.
 
 ### Task 1 — Versioned scene document model
 

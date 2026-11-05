@@ -167,14 +167,14 @@ This is the persistent handoff log for feature work in this project. Read it bef
 
 #### Feature: Realistic 3D WAM authoring tools
 
-- **Status:** Planned
+- **Status:** In progress (Task 0 spike verified; companion-runtime approval pending)
 - **Goal:** Specify a path from the current textured-body/predefined-widget editor to a general 3D scene authoring workflow with model assets, materials, component interactions, WAM bindings, and compatible runtime export.
-- **Progress:** Created `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` with the current capability gap, author workflow, descriptor/runtime constraints, ordered implementation tasks, and release acceptance criteria. This is a specification only; no authoring or runtime functionality was implemented.
-- **Relevant files:** `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` (proposed feature requirements and task breakdown); `EDITOR_V2_SPECIFICATION.md` (current descriptor and runtime compatibility background).
-- **Decisions and constraints:** Scope is general-purpose authoring with original or properly authorized assets. An editor-only 2D reference cannot substitute for actual geometry. Existing legacy descriptors and predefined widgets must remain compatible; any new runtime behavior must be implemented and integration-tested in the consuming runtime.
-- **Validation:** Documentation-only change; not run.
-- **Known pitfalls:** Fidelity depends on the geometry, material assets, measurements, and WAM endpoints supplied. Editor preview alone does not establish consumer-runtime compatibility.
-- **Next step:** Begin Task 0 in `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` before implementing features.
+- **Progress:** Added an isolated GLB feasibility helper and locally generated authorized fixture. The helper loads the GLB with the real loader, exposes stable asset-scoped mesh selection, embeds and integrity-checks the model when saving/reloading a portable project document, and disposes its asset container. Recorded the coordinate, packaging, asset-policy, limits, and proposed runtime-boundary decisions in the specification. This is not integrated into the editor UI or legacy descriptor API.
+- **Relevant files:** `REALISTIC_3D_WAM_AUTHORING_SPECIFICATION.md` (requirements and Task 0 spike record); `src/scene/GlbProofOfConcept.ts` (isolated import/select/save/reload/dispose spike); `test/fixtures/authorized-glb.mjs` (locally generated hierarchy/material/texture fixture); `test/glb-proof-of-concept.test.mjs` (coverage); `package.json` and `package-lock.json` (matched loader dependency); `EDITOR_V2_SPECIFICATION.md` (existing descriptor and runtime compatibility background).
+- **Decisions and constraints:** Babylon.js core and `@babylonjs/loaders` are both pinned to `8.24.0`. Candidate coordinates are left-handed, +Y up, +X right, +Z forward, one unit per meter; the proof-of-concept uses a single JSON package with the GLB embedded as base64 and SHA-256 asset/node identity. Initial limits are 25 MiB, 250 renderable meshes, and 100,000 vertices; external resource URIs and required glTF extensions are explicitly rejected. Only original or properly authorized assets may be used. The runtime boundary and proposed feature IDs remain drafts because the companion runtime/owner is not in this checkout; no new runtime features are declared to consumers.
+- **Validation:** `npm test` passed (99 tests, 0 failures). `npm run build` passed. The library build still prints existing TS4094 declaration diagnostics in `AnalyzerFieldValue.ts`, `ParameterFieldValue.ts`, and `ProgramFieldValue.ts`; the build completes successfully.
+- **Known pitfalls:** The spike is not a user-facing importer, does not negotiate or verify runtime feature support, and its embedded JSON package is a feasibility format rather than an approved production package. Editor-side scene membership does not establish companion-runtime rendering or behavior.
+- **Next step:** Obtain companion-runtime owner approval for the coordinate, packaging, ownership, and feature-ID contract, then run a consumer integration test before starting user-facing Task 1 work.
 
 ### Feature entry template
 
