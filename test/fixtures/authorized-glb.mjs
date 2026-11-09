@@ -96,3 +96,23 @@ export function createAuthorizedGlb({ extensionsRequired = [], externalImage = f
 
     return Buffer.concat([header, jsonHeader, jsonChunk, binaryHeader, binaryChunk]);
 }
+
+export function createAuthorizedGltfFiles({ extensionsRequired = [] } = {}) {
+    const glb = createAuthorizedGlb();
+    const jsonLength = glb.readUInt32LE(12);
+    const json = JSON.parse(glb.subarray(20, 20 + jsonLength).toString("utf8").trim());
+    const binaryHeaderOffset = 20 + jsonLength;
+    const binaryLength = glb.readUInt32LE(binaryHeaderOffset);
+    const binary = glb.subarray(binaryHeaderOffset + 8, binaryHeaderOffset + 8 + binaryLength);
+    const imageView = json.bufferViews[3];
+    const texture = binary.subarray(imageView.byteOffset, imageView.byteOffset + imageView.byteLength);
+    json.buffers[0].uri = "buffers/mesh.bin";
+    json.images[0] = { uri: "textures/albedo.png" };
+    if (extensionsRequired.length > 0) json.extensionsRequired = extensionsRequired;
+
+    return [
+        { path: "instrument.gltf", data: Buffer.from(JSON.stringify(json)) },
+        { path: "buffers/mesh.bin", data: binary },
+        { path: "textures/albedo.png", data: texture },
+    ];
+}

@@ -15,7 +15,7 @@ export interface SceneTransform {
 export interface SceneAsset {
     id: string;
     uri: string;
-    media_type: "model/gltf-binary" | "model/gltf+json" | "image/png" | "image/jpeg" | "image/webp";
+    media_type: "model/gltf-binary" | "model/gltf+json" | "application/octet-stream" | "image/png" | "image/jpeg" | "image/webp";
     [optionalProperty: string]: unknown;
 }
 
@@ -133,6 +133,7 @@ const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MEDIA_TYPES = new Set<SceneAsset["media_type"]>([
     "model/gltf-binary",
     "model/gltf+json",
+    "application/octet-stream",
     "image/png",
     "image/jpeg",
     "image/webp",
