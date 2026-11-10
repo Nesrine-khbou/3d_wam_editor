@@ -62,6 +62,7 @@ interface SceneNodeBase {
     kind: "imported_mesh" | "primitive" | "group" | "interactive" | "visual";
     parent: string | null;
     transform: SceneTransform;
+    pivot: SceneVector3;
     visible: boolean;
     locked: boolean;
     material_refs?: SceneMaterialReference[];
@@ -329,6 +330,7 @@ function readNode(
     const parentValue = source.parent === undefined ? null : source.parent;
     const parent = parentValue === null ? null : requireId(parentValue, `scene.nodes[${index}].parent`);
     const transform = readTransform(source.transform, `scene.nodes[${index}].transform`);
+    const pivot = readVector(source.pivot, `scene.nodes[${index}].pivot`, [0, 0, 0]);
     const visible = source.visible ?? true;
     const locked = source.locked ?? false;
     if (typeof visible !== "boolean") throw new TypeError(`scene.nodes[${index}].visible must be a boolean`);
@@ -340,6 +342,7 @@ function readNode(
         name,
         parent,
         transform,
+        pivot,
         visible,
         locked,
         ...(materialReferences === undefined ? {} : { material_refs: materialReferences }),

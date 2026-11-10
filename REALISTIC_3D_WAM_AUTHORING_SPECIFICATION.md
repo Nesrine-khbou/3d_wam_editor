@@ -337,6 +337,16 @@ The descriptor shape used by this model is:
 3.4. Ensure all operations update the scene model and serialize without retaining runtime mesh references.  
 3.5. Test hierarchy edits, transform math, snapping, undo/redo, and reload fidelity.
 
+#### Task 3 implementation record (2026-11-09)
+
+- **3.1 Scene hierarchy:** Added a Scene Hierarchy panel available from the editor's View menu. It displays the loaded scene graph and supports selection (Ctrl/Cmd-click for multi-select), rename, group/ungroup, hide/show, lock/unlock, duplicate, delete, and reparent. Grouping and reparenting preserve world poses where the resulting transform is representable as TRS.
+- **3.2 Transforms and gizmos:** Added numeric position, Euler rotation (radians), and scale fields with local/world modes, plus position/rotation/scale Babylon gizmos for the selected scene node. The gizmos operate on transient `TransformNode` proxies; a completed drag is applied to the serializable model as one shared undo/redo transaction. Locked nodes and descendants cannot be moved/rotated/scaled through the transform editor.
+- **3.3 Pivot and view tools:** Added a general per-node pivot vector (default `[0, 0, 0]` for older scene documents), pivot fields, Focus selected, Fit scene, and independently configurable translation, rotation, and scale snapping. Translation increments are in scene units, rotation increments in radians, and scale increments in scale units.
+- **3.4 Serializable source of truth:** Hierarchy, visibility, lock, pivot, and transform edits update `WamGUIGenerator.scene_document`, so the existing descriptor save/load and document history keep the edits. Babylon nodes exist only as disposable viewport proxies; no Babylon or DOM references enter saved descriptors.
+- **3.5 Automated coverage:** `test/scene-document-editor.test.mjs` verifies hierarchy edits, cross-parent grouping, reparent/group world-transform preservation, world/local transforms, snapping validation, pivot serialization/reload normalization, lock behavior, delete/duplicate IDs, and history undo/redo.
+
+**Task 3 status:** 3.1–3.5 are implemented and covered by automated tests. The panel edits scene descriptors but does not yet render imported models or primitive geometry from the new scene graph; its viewport gizmos are attached to transform proxies. Scene visibility is persisted, but does not yet hide rendered imported meshes. Runtime consumer integration remains outside this repository.
+
 ### Task 4 — Primitive geometry and reusable assemblies
 
 4.1. Add parameterized box, cylinder, sphere, plane, and rounded/lathed primitives.  

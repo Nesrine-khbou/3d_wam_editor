@@ -55,6 +55,11 @@ export function menubarViewport(
         label = label.charAt(0).toUpperCase() + label.slice(1) // Capitalize first letter
         label = label.replace(/ [a-z]/g,it=>it.toUpperCase())
         view_menu[label] = ()=>{
+            const existingPanel = dockview.getPanel(id)
+            if(existingPanel){
+                existingPanel.api.setActive()
+                return
+            }
             dockview.addPanel({
                 id,
                 title: label,

@@ -27,6 +27,7 @@ import { AudioTestPane } from "./editor/AudioTestPane.ts"
 import { WamThumbnailReference } from "./utils/thumbnail-reference.ts"
 import { DesignWorkspacePane } from "./editor/DesignWorkspacePane.ts"
 import { DocumentHistory, DocumentHistoryState, HistoryCommandRunner } from "./editor/DocumentHistory.ts"
+import { SceneHierarchyPane } from "./editor/SceneHierarchyPane.ts"
 
 let audioContext: AudioContext
 let host: string
@@ -80,6 +81,12 @@ const wampad = new WamPadPane(
     visible => editor.setFaceTransformOverlayVisible(visible),
 )
 const workspace = new DesignWorkspacePane(editor, view_3d)
+const scene_hierarchy = new SceneHierarchyPane(
+    editor.gui_generator.value,
+    view_3d,
+    documentHistory,
+    runHistoryCommand,
+)
 const load_save = new LoadSavePane(editor.gui_generator, wam_loader.url, controls, runHistoryCommand)
 const images = new ImagesPane(DECORATION_IMAGES)
 const examples = new ExamplesPane(
@@ -372,7 +379,7 @@ clipboard.link(({to})=>{
 const components: Record<string,IContentRenderer> = {
     wam_loader, workspace, selector,
     settings, editor_toolbar, wampad, load_save,
-    images, examples: examples, autolayout, test2d,
+    images, examples: examples, autolayout, test2d, scene_hierarchy,
     keyboard, debug, audioTest,
 }
 
