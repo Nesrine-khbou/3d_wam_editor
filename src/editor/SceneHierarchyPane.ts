@@ -9,7 +9,7 @@ import {
     type SceneTransformKind,
     type SceneTransformSpace,
 } from "../scene/SceneDocumentEditor.ts";
-import type { SceneNode, SceneVector3 } from "../descriptor/WamGuiScene.ts";
+import type { SceneNode, ScenePrimitiveType, SceneVector3, WamGuiSceneDocument } from "../descriptor/WamGuiScene.ts";
 
 interface SceneEditHistory {
     begin(label: string): void;
@@ -30,7 +30,9 @@ export class SceneHierarchyPane {
     private selectedId: string | null = null;
     private transformKind: SceneTransformKind = "position";
     private transformSpace: SceneTransformSpace = "local";
+    private primitiveType: ScenePrimitiveType = "box";
     private snapSettings: SceneSnapSettings = structuredClone(DEFAULT_SCENE_SNAP_SETTINGS);
+    private feedback = "";
 
     constructor(
         generator: WamGUIGenerator,
@@ -61,10 +63,14 @@ export class SceneHierarchyPane {
         this.element.replaceChildren();
         const toolbar = html.a`<div class="scene-hierarchy__toolbar"></div>`;
         this.element.appendChild(toolbar);
-        this.addButton(toolbar, "Group", () => this.command("Group scene nodes", () => {
+        const status = html.a`<output class="scene-hierarchy__status" aria-live="polite"></output>`;
+        status.textContent = this.feedback;
+        this.element.appendChild(status);
+        const assemblyButton = this.addButton(toolbar, "Create Assembly", () => this.command("Create scene assembly", () => {
             this.selectedId = this.editor.group(this.editor.selection);
             this.render();
         }), !sceneDocument || this.editor.selection.length === 0);
+        assemblyButton.title = "Group selected nodes into a reusable assembly; duplicate the group to reuse it";
         this.addButton(toolbar, "Ungroup", () => this.command("Ungroup scene node", () => {
             if (this.selectedId) this.editor.ungroup(this.selectedId);
             this.selectedId = null;
@@ -80,6 +86,25 @@ export class SceneHierarchyPane {
             this.selectedId = null;
             this.render();
         }), !sceneDocument || this.editor.selection.length === 0);
+        const createScene = this.addButton(toolbar, "Create scene", () => this.command("Create 3D scene", () => {
+            this.editor.createScene();
+            this.render();
+        }), sceneDocument !== null);
+        createScene.title = "Start a new empty 3D scene document";
+        const primitiveControls = html.a`<div class="scene-hierarchy__controls"></div>`;
+        const viewHint = html.a`<p class="scene-hierarchy__help"></p>`;
+        viewHint.textContent = "3D primitives appear in the 3D preview. The 2D view is reserved for WAM controls.";
+        primitiveControls.appendChild(viewHint);
+        this.addSelect(primitiveControls, "Primitive", ["box", "cylinder", "sphere", "plane", "rounded", "lathed"], this.primitiveType, value => {
+            this.primitiveType = value as ScenePrimitiveType;
+        });
+        this.addButton(primitiveControls, "Add primitive", () => this.command(`Add ${this.primitiveType}`, () => {
+            this.selectedId = this.editor.addPrimitive(this.primitiveType, this.selectedGroupId(sceneDocument));
+            this.editor.select([this.selectedId]);
+            this.render();
+            this.viewport.fitScene();
+        }), !sceneDocument);
+        this.element.appendChild(primitiveControls);
 
         const modeControls = html.a`<div class="scene-hierarchy__controls"></div>`;
         this.element.appendChild(modeControls);
@@ -137,7 +162,7 @@ export class SceneHierarchyPane {
 
         if (!sceneDocument) {
             const empty = html.a`<p class="scene-hierarchy__empty"></p>`;
-            empty.textContent = "No 3D scene document is loaded. Import a scene asset or load a descriptor to begin editing.";
+            empty.textContent = "No 3D scene is loaded. Create one here or load a descriptor, then add a primitive to begin.";
             this.element.appendChild(empty);
             this.viewport.setSceneDocument(null, null, () => {}, () => {});
             return;
@@ -238,7 +263,72 @@ export class SceneHierarchyPane {
         this.renderVectorInput(inspector, "Rotation (rad)", "rotation", node.transform.rotation, node.id);
         this.renderVectorInput(inspector, "Scale", "scale", node.transform.scale, node.id);
         this.renderVectorInput(inspector, "Pivot", "pivot", node.pivot, node.id);
+        if (node.kind === "primitive") {
+            const geometryHeading = html.a`<h3>Primitive geometry</h3>`;
+            inspector.appendChild(geometryHeading);
+            const geometryLabel = html.a`<p class="scene-hierarchy__help"></p>`;
+            geometryLabel.textContent = `${node.geometry.type} dimensions are stored in scene units.`;
+            inspector.appendChild(geometryLabel);
+            for (const [parameter, value] of Object.entries(node.geometry.parameters)) {
+                const controls = html.a`<div class="scene-hierarchy__parameter"></div>`;
+                const numeric = document.createElement("input");
+                numeric.type = "number";
+                numeric.step = ["segments", "tessellation"].includes(parameter) ? "1" : "0.01";
+                numeric.min = ["segments", "tessellation"].includes(parameter) ? "3" : "0.01";
+                numeric.value = String(value);
+                numeric.setAttribute("aria-label", `Primitive ${parameter}`);
+                const slider = document.createElement("input");
+                slider.type = "range";
+                slider.min = numeric.min;
+                slider.step = numeric.step;
+                slider.value = String(value);
+                slider.setAttribute("aria-label", `Primitive ${parameter} slider`);
+                slider.title = "Drag to adjust; release to apply the change";
+                const radiusLimit = parameter === "radius" && node.geometry.type === "rounded"
+                    ? Math.min(
+                        node.geometry.parameters.width ?? 1,
+                        node.geometry.parameters.height ?? 1,
+                        node.geometry.parameters.depth ?? 1,
+                    ) / 2
+                    : null;
+                const sliderMaximum = radiusLimit ?? Math.max(value * 4, value + 1);
+                slider.max = String(Math.max(Number(slider.min), sliderMaximum));
+                slider.addEventListener("input", () => {
+                    numeric.value = slider.value;
+                });
+                const commitParameter = (rawValue: string): void => {
+                    const nextValue = Number(rawValue);
+                    if (
+                        !Number.isFinite(nextValue)
+                        || nextValue <= 0
+                        || (["segments", "tessellation"].includes(parameter) && (!Number.isInteger(nextValue) || nextValue < 3))
+                        || (radiusLimit !== null && nextValue > radiusLimit)
+                    ) {
+                        numeric.value = String(value);
+                        slider.value = String(value);
+                        return;
+                    }
+                    numeric.value = String(nextValue);
+                    slider.value = String(nextValue);
+                    const nextParameters = { ...node.geometry.parameters, [parameter]: nextValue };
+                    this.command("Edit primitive geometry", () =>
+                        this.editor.setPrimitiveParameters(node.id, nextParameters));
+                };
+                numeric.addEventListener("change", () => commitParameter(numeric.value));
+                slider.addEventListener("change", () => commitParameter(slider.value));
+                controls.append(numeric, slider);
+                inspector.appendChild(this.labeled(parameter.replaceAll("_", " "), controls));
+            }
+        }
         this.element.appendChild(inspector);
+    }
+
+    private selectedGroupId(sceneDocument: WamGuiSceneDocument | null): string | null {
+        if (!sceneDocument || !this.selectedId) return null;
+        const selected = sceneDocument.nodes.find(node => node.id === this.selectedId);
+        if (selected?.kind === "group") return selected.id;
+        const parent = sceneDocument.nodes.find(node => node.id === selected?.parent);
+        return parent?.kind === "group" ? parent.id : null;
     }
 
     private renderVectorInput(
@@ -320,7 +410,9 @@ export class SceneHierarchyPane {
 
     private command(label: string, operation: () => void): void {
         void this.runHistoryCommand(label, operation).catch(error => {
+            this.feedback = `${label} failed: ${error instanceof Error ? error.message : String(error)}`;
             console.error(`Unable to ${label.toLowerCase()}`, error);
+            this.render();
         });
     }
 }

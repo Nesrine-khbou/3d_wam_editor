@@ -111,6 +111,7 @@ const audioTest = new AudioTestPane(audioContext!!, wam_loader.wam)
 const beginDocumentEdit = (event: Event): void => {
     const target = event.target
     if(!(target instanceof HTMLElement)) return
+    if(target.closest(".scene-hierarchy")) return
     if(target.matches("input, select, textarea")){
         documentHistory.begin("Edit document settings")
     }else if(target.closest(".control_container, .transformer")){

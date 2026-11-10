@@ -354,6 +354,15 @@ The descriptor shape used by this model is:
 4.3. Add bevel/chamfer only where the chosen implementation can serialize and reproduce it consistently at runtime.  
 4.4. Test deterministic rendering and dimensions in both editor and runtime renderers.
 
+#### Task 4 implementation record (2026-11-10)
+
+- **4.1 Parameterized primitives:** Added create/add controls to Scene Hierarchy for box, cylinder, sphere, plane, rounded box, and lathed profile primitives. Each primitive stores its type and dimensions/quality settings in the scene descriptor, and its parameter fields can be edited in the inspector. Babylon meshes are generated from these values in the 3D workspace. Rounded boxes use a deterministic generated mesh; lathed forms use a serialized top/bottom-radius profile rendered as a rotational surface. Invalid dimensions, radii, and tessellation settings are rejected by scene validation.
+- **4.2 Assemblies and pivots:** Added a “Create Assembly” action that groups selected nodes, preserves their world poses, and stores the result as a normal scene group. Existing subtree duplication makes grouped assemblies reusable; per-node pivot values are applied to the viewport transform nodes and remain descriptor data.
+- **4.3 Bevel/chamfer:** No independent bevel/chamfer modifier was added. Although the editor now renders a rounded-box primitive with a serialized radius, this checkout has no companion runtime renderer to confirm a distinct bevel/chamfer parameter is supported and reproduced there. Avoid claiming runtime bevel parity until that renderer contract is available.
+- **4.4 Determinism and dimensions:** Added NullEngine tests for deterministic vertex/index data and expected bounds for all six primitive types, plus scene validation and descriptor-edit tests. The editor-side geometry checks pass. Runtime-renderer parity could not be tested because the runtime consumer/renderer is outside this repository; therefore 4.4 remains partially blocked on external runtime access.
+
+**Task 4 status:** Editor primitive creation, parameter editing, rendering, assembly grouping/duplication, and pivots are implemented. The external runtime parity portion of 4.4 remains unverified, and 4.3's separate bevel/chamfer modifier is intentionally omitted pending a compatible runtime implementation.
+
 ### Task 5 — PBR material and decal tools
 
 5.1. Add a material model and inspector for supported PBR values and texture maps.  

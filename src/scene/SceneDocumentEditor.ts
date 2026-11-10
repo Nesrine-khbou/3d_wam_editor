@@ -1,6 +1,18 @@
 import { Matrix, Quaternion, Vector3 } from "@babylonjs/core";
 import { normalizeWamGuiScene } from "../descriptor/WamGuiScene.ts";
-import type { SceneNode, SceneTransform, SceneVector3, WamGuiSceneDocument } from "../descriptor/WamGuiScene.ts";
+import {
+    WAM_GUI_SCENE_COORDINATE_SYSTEM,
+    WAM_GUI_SCENE_TRANSFORM_CONVENTION,
+} from "../descriptor/WamGuiScene.ts";
+import type {
+    SceneNode,
+    ScenePrimitiveNode,
+    ScenePrimitiveType,
+    SceneTransform,
+    SceneVector3,
+    WamGuiSceneDocument,
+} from "../descriptor/WamGuiScene.ts";
+import { DEFAULT_SCENE_PRIMITIVE_PARAMETERS } from "./ScenePrimitiveRenderer.ts";
 
 export type SceneTransformSpace = "local" | "world";
 export type SceneTransformKind = "position" | "rotation" | "scale";
@@ -94,6 +106,58 @@ export class SceneDocumentEditor {
         if (nodeIdsSet.size !== nodeIds.length) throw new TypeError("Scene selection must not contain duplicate node IDs");
         for (const id of nodeIds) this.requireNode(document, id);
         this.selectedIds = [...nodeIds];
+    }
+
+    createScene(): void {
+        if (this.read() !== null) throw new Error("A 3D scene document is already loaded");
+        this.write({
+            schema_version: 1,
+            coordinate_system: WAM_GUI_SCENE_COORDINATE_SYSTEM,
+            transform_convention: WAM_GUI_SCENE_TRANSFORM_CONVENTION,
+            nodes: [],
+        });
+        this.selectedIds = [];
+    }
+
+    addPrimitive(type: ScenePrimitiveType, parentId: string | null = null): string {
+        const document = this.requireDocument();
+        if (parentId !== null && this.requireNode(document, parentId).kind !== "group") {
+            throw new TypeError(`Primitive parent "${parentId}" must be a group node`);
+        }
+        const id = this.uniqueId(document);
+        const labels: Record<ScenePrimitiveType, string> = {
+            box: "Box",
+            cylinder: "Cylinder",
+            sphere: "Sphere",
+            plane: "Plane",
+            rounded: "Rounded Box",
+            lathed: "Lathed Form",
+        };
+        this.update(current => {
+            const node: ScenePrimitiveNode = {
+                id,
+                name: labels[type],
+                kind: "primitive",
+                parent: parentId,
+                transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+                pivot: [0, 0, 0],
+                visible: true,
+                locked: false,
+                geometry: { type, parameters: { ...DEFAULT_SCENE_PRIMITIVE_PARAMETERS[type] } },
+            };
+            current.nodes.push(node);
+        });
+        this.selectedIds = [id];
+        return id;
+    }
+
+    setPrimitiveParameters(nodeId: string, parameters: Record<string, number>): void {
+        this.update(document => {
+            const node = this.requireNode(document, nodeId);
+            this.assertUnlocked(document, node);
+            if (node.kind !== "primitive") throw new TypeError(`Scene node "${nodeId}" is not a primitive`);
+            node.geometry.parameters = { ...parameters };
+        });
     }
 
     rename(nodeId: string, name: string): void {

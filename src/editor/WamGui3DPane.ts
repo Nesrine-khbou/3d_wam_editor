@@ -5,6 +5,7 @@ import {
     Color4,
     Engine,
     GizmoManager,
+    Mesh,
     Quaternion,
     Scene,
     TransformNode,
@@ -12,6 +13,7 @@ import {
 } from "@babylonjs/core";
 import type { SceneTransform, WamGuiSceneDocument } from "../descriptor/WamGuiScene.ts";
 import type { SceneSnapSettings, SceneTransformSpace } from "../scene/SceneDocumentEditor.ts";
+import { createScenePrimitiveMesh } from "../scene/ScenePrimitiveRenderer.ts";
 
 
 export class WamGui3DPane implements IContentRenderer{
@@ -23,6 +25,7 @@ export class WamGui3DPane implements IContentRenderer{
     scene: Scene
     private gizmoManager: GizmoManager
     private readonly sceneNodes = new Map<string, TransformNode>()
+    private readonly primitiveMeshes = new Map<string, Mesh>()
     private readonly wiredGizmos = new WeakSet<object>()
     private sceneDocument: WamGuiSceneDocument | null = null
     private selectedSceneNode: string | null = null
@@ -51,7 +54,8 @@ export class WamGui3DPane implements IContentRenderer{
         this.scene.createDefaultLight();
         this.scene.clearColor = new Color4(0,0,0,0)
     
-        this.camera = new ArcRotateCamera("camera", -Math.PI/2, 0, 1.7, new Vector3(0,0,0), this.scene);
+        this.camera = new ArcRotateCamera("camera", -Math.PI/2, Math.PI/3, 1.7, new Vector3(0,0,0), this.scene);
+        this.camera.minZ = 0.05
         this.camera.wheelPrecision = 100
         this.camera.lowerRadiusLimit = 0.25
         this.camera.upperRadiusLimit = 20
@@ -97,6 +101,11 @@ export class WamGui3DPane implements IContentRenderer{
                 this.sceneNodes.delete(id)
             }
         }
+        for (const mesh of this.primitiveMeshes.values()) {
+            mesh.material?.dispose()
+            mesh.dispose()
+        }
+        this.primitiveMeshes.clear()
         for (const node of document?.nodes ?? []) {
             let runtimeNode = this.sceneNodes.get(node.id)
             if (!runtimeNode) {
@@ -116,6 +125,13 @@ export class WamGui3DPane implements IContentRenderer{
             )
             runtimeNode.scaling.set(...node.transform.scale)
             runtimeNode.setPivotPoint(new Vector3(...node.pivot))
+            runtimeNode.setEnabled(this.isEffectivelyVisible(node.id))
+            if (node.kind === "primitive") {
+                const mesh = createScenePrimitiveMesh(this.scene, node)
+                mesh.parent = runtimeNode
+                mesh.position.set(0, 0, 0)
+                this.primitiveMeshes.set(node.id, mesh)
+            }
         }
         this.attachSelectedSceneNode()
     }
@@ -150,10 +166,23 @@ export class WamGui3DPane implements IContentRenderer{
             return
         }
         const points = [...this.sceneNodes.values()].map(node => node.getAbsolutePosition())
-        const min = points.reduce((result, point) => Vector3.Minimize(result, point), points[0].clone())
-        const max = points.reduce((result, point) => Vector3.Maximize(result, point), points[0].clone())
+        const bounds = [...this.primitiveMeshes.values()].map(mesh => {
+            mesh.computeWorldMatrix(true)
+            const box = mesh.getBoundingInfo().boundingBox
+            return { min: box.minimumWorld, max: box.maximumWorld }
+        })
+        const min = bounds.length > 0
+            ? bounds.reduce((result, box) => Vector3.Minimize(result, box.min), points[0].clone())
+            : points[0].clone()
+        const max = bounds.length > 0
+            ? bounds.reduce((result, box) => Vector3.Maximize(result, box.max), points[0].clone())
+            : points[0].clone()
+        for (const point of points) {
+            min.copyFrom(Vector3.Minimize(min, point))
+            max.copyFrom(Vector3.Maximize(max, point))
+        }
         const center = min.add(max).scale(0.5)
-        const radius = Math.max(Vector3.Distance(min, max) * 0.75, 0.5)
+        const radius = Math.max(Vector3.Distance(min, max) * 1.5, 1.7)
         this.camera.setTarget(center)
         this.camera.radius = Math.min(this.camera.upperRadiusLimit ?? 20, Math.max(this.camera.lowerRadiusLimit ?? 0.25, radius))
     }
@@ -203,6 +232,11 @@ export class WamGui3DPane implements IContentRenderer{
         this.gizmoManager.dispose()
         for (const node of this.sceneNodes.values()) node.dispose()
         this.sceneNodes.clear()
+        for (const mesh of this.primitiveMeshes.values()) {
+            mesh.material?.dispose()
+            mesh.dispose()
+        }
+        this.primitiveMeshes.clear()
         this.renderLoopStarted = false
     }
 
@@ -219,6 +253,12 @@ export class WamGui3DPane implements IContentRenderer{
         const node = this.sceneDocument?.nodes.find(candidate => candidate.id === nodeId)
         if (!node) return false
         return node.locked || (node.parent !== null && this.isAncestorLocked(node.parent))
+    }
+
+    private isEffectivelyVisible(nodeId: string): boolean {
+        const node = this.sceneDocument?.nodes.find(candidate => candidate.id === nodeId)
+        if (!node || !node.visible) return false
+        return node.parent === null || this.isEffectivelyVisible(node.parent)
     }
 
     private updateGizmoSpace(): void {

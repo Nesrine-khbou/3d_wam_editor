@@ -410,7 +410,7 @@ h3{
     height: 100%;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    overflow: auto;
 }
 
 .design-workspace__toolbar{
@@ -624,6 +624,22 @@ h3{
     gap: .35rem;
 }
 
+.scene-hierarchy__status{
+    min-height: 1.1em;
+    color: var(--select-hover);
+    font-size: .8rem;
+}
+
+.scene-hierarchy__help{
+    margin: 0;
+    font-size: .75rem;
+    opacity: .8;
+}
+
+.scene-hierarchy__controls > .scene-hierarchy__help{
+    flex: 1 1 100%;
+}
+
 .scene-hierarchy button,
 .scene-hierarchy select,
 .scene-hierarchy input{
@@ -673,7 +689,11 @@ h3{
     display: flex;
     flex-direction: column;
     gap: .1rem;
+    flex: 0 1 35%;
+    max-height: 35%;
     min-height: 4rem;
+    overflow: auto;
+    overscroll-behavior: contain;
 }
 
 .scene-hierarchy__node{
@@ -698,10 +718,14 @@ h3{
 
 .scene-hierarchy__inspector{
     display: flex;
+    flex: 1 0 8rem;
     flex-direction: column;
+    min-height: 8rem;
     gap: .35rem;
     padding-top: .5rem;
     border-top: 1px solid var(--alt);
+    overflow: auto;
+    overscroll-behavior: contain;
 }
 
 .scene-hierarchy__inspector h3{
@@ -721,6 +745,23 @@ h3{
     display: grid;
     grid-template-columns: minmax(4rem, .5fr) repeat(3, minmax(0, 1fr));
     gap: .2rem;
+}
+
+.scene-hierarchy__parameter{
+    display: grid;
+    grid-template-columns: minmax(4rem, .45fr) minmax(4rem, 1fr);
+    align-items: center;
+    gap: .3rem;
+}
+
+.scene-hierarchy__parameter input[type="number"]{
+    width: 100%;
+}
+
+.scene-hierarchy__parameter input[type="range"]{
+    width: 100%;
+    padding: 0;
+    accent-color: var(--select-hover);
 }
 
 .scene-hierarchy__vector input{

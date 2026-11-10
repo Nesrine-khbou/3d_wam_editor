@@ -365,16 +365,34 @@ function readNode(
             const parameters = geometry.parameters === undefined
                 ? {}
                 : requireRecord(geometry.parameters, `scene.nodes[${index}].geometry.parameters`);
-            for (const [parameter, parameterValue] of Object.entries(parameters)) {
+            const primitiveParameters: Record<string, number> = {};
+            for (const [parameter, rawValue] of Object.entries(parameters)) {
                 if (!/^[a-z][a-z0-9_]*$/.test(parameter)) throw new TypeError(`Invalid primitive parameter name "${parameter}"`);
-                if (requireFinite(parameterValue, `scene.nodes[${index}].geometry.parameters.${parameter}`) <= 0) {
+                const parameterValue = requireFinite(rawValue, `scene.nodes[${index}].geometry.parameters.${parameter}`);
+                if (parameterValue <= 0) {
                     throw new RangeError(`scene.nodes[${index}].geometry.parameters.${parameter} must be greater than 0`);
+                }
+                primitiveParameters[parameter] = parameterValue;
+            }
+            for (const parameter of ["segments", "tessellation"]) {
+                const parameterValue = primitiveParameters[parameter];
+                if (parameterValue !== undefined && (!Number.isInteger(parameterValue) || parameterValue < 3)) {
+                    throw new RangeError(`scene.nodes[${index}].geometry.parameters.${parameter} must be an integer of at least 3`);
+                }
+            }
+            if (geometry.type === "rounded") {
+                const width = primitiveParameters.width ?? 1;
+                const height = primitiveParameters.height ?? 1;
+                const depth = primitiveParameters.depth ?? 1;
+                const radius = primitiveParameters.radius ?? 0.1;
+                if (radius > Math.min(width, height, depth) / 2) {
+                    throw new RangeError(`scene.nodes[${index}].geometry.parameters.radius must not exceed half the smallest dimension`);
                 }
             }
             return {
                 ...base,
                 kind: "primitive",
-                geometry: { ...structuredClone(geometry), type: geometry.type as ScenePrimitiveType, parameters: { ...parameters } as Record<string, number> },
+                geometry: { ...structuredClone(geometry), type: geometry.type as ScenePrimitiveType, parameters: primitiveParameters },
             } as ScenePrimitiveNode;
         }
         case "interactive": {
