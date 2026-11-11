@@ -6,8 +6,11 @@ import {
 } from "../descriptor/WamGuiScene.ts";
 import type {
     SceneNode,
+    SceneMaterial,
+    SceneAsset,
     ScenePrimitiveNode,
     ScenePrimitiveType,
+    SceneVisualNode,
     SceneTransform,
     SceneVector3,
     WamGuiSceneDocument,
@@ -124,6 +127,7 @@ export class SceneDocumentEditor {
         if (parentId !== null && this.requireNode(document, parentId).kind !== "group") {
             throw new TypeError(`Primitive parent "${parentId}" must be a group node`);
         }
+
         const id = this.uniqueId(document);
         const labels: Record<ScenePrimitiveType, string> = {
             box: "Box",
@@ -151,12 +155,99 @@ export class SceneDocumentEditor {
         return id;
     }
 
+    addTextVisual(parentId: string | null = null): string {
+        const document = this.requireDocument();
+        if (parentId !== null && this.requireNode(document, parentId).kind !== "group") {
+            throw new TypeError(`Text visual parent "${parentId}" must be a group node`);
+        }
+
+        const id = this.uniqueId(document);
+        this.update(current => {
+            const node: SceneVisualNode = {
+                id,
+                name: "Text",
+                kind: "visual",
+                visual_type: "text",
+                parent: parentId,
+                text: "Text",
+                font_family: "Arial",
+                font_size: 0.24,
+                size: [1, 0.3],
+                transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+                pivot: [0, 0, 0],
+                visible: true,
+                locked: false,
+            };
+            current.nodes.push(node);
+        });
+        this.selectedIds = [id];
+        return id;
+    }
+
+    addAsset(asset: SceneAsset): void {
+        this.update(document => {
+            document.assets ??= [];
+            if (document.assets.some(candidate => candidate.id === asset.id)) {
+                throw new TypeError(`Scene asset ID "${asset.id}" already exists`);
+            }
+            if (document.assets.some(candidate => candidate.uri === asset.uri)) {
+                throw new TypeError(`Scene asset URI "${asset.uri}" already exists`);
+            }
+            document.assets.push(deepClone(asset));
+        });
+    }
+
     setPrimitiveParameters(nodeId: string, parameters: Record<string, number>): void {
         this.update(document => {
             const node = this.requireNode(document, nodeId);
             this.assertUnlocked(document, node);
             if (node.kind !== "primitive") throw new TypeError(`Scene node "${nodeId}" is not a primitive`);
             node.geometry.parameters = { ...parameters };
+        });
+    }
+
+    createMaterial(name = "Material"): string {
+        const document = this.requireDocument();
+        const id = this.uniqueId(document);
+        this.update(current => {
+            current.materials ??= [];
+            current.materials.push({
+                id,
+                name: name.trim() || "Material",
+                base_color: [0.35, 0.65, 0.9, 1],
+                metallic: 0,
+                roughness: 0.5,
+                alpha_mode: "opaque",
+            });
+        });
+        return id;
+    }
+
+    setMaterial(materialId: string, changes: Partial<SceneMaterial>): void {
+        this.update(document => {
+            const material = (document.materials ?? []).find(candidate => candidate.id === materialId);
+            if (!material) throw new RangeError(`Unknown scene material ID "${materialId}"`);
+            Object.assign(material, deepClone(changes));
+        });
+    }
+
+    assignMaterial(nodeId: string, materialId: string | null): void {
+        this.update(document => {
+            const node = this.requireNode(document, nodeId);
+            if (materialId !== null && !(document.materials ?? []).some(material => material.id === materialId)) {
+                throw new RangeError(`Unknown scene material ID "${materialId}"`);
+            }
+            if (materialId === null) delete node.material_refs;
+            else node.material_refs = [{ material_id: materialId }];
+        });
+    }
+
+    setVisualText(nodeId: string, text: string): void {
+        if (text.trim().length === 0) throw new TypeError("Visual text must not be empty");
+        this.update(document => {
+            const node = this.requireNode(document, nodeId);
+            if (node.kind !== "visual" || node.visual_type !== "text") throw new TypeError(`Scene node "${nodeId}" is not a text visual`);
+            node.text = text;
         });
     }
 

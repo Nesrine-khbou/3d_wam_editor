@@ -9,7 +9,8 @@ import {
     type SceneTransformKind,
     type SceneTransformSpace,
 } from "../scene/SceneDocumentEditor.ts";
-import type { SceneNode, ScenePrimitiveType, SceneVector3, WamGuiSceneDocument } from "../descriptor/WamGuiScene.ts";
+import type { SceneAsset, SceneMaterial, SceneMaterialTextures, SceneNode, ScenePrimitiveType, SceneTextureReference, SceneVector3, WamGuiSceneDocument } from "../descriptor/WamGuiScene.ts";
+import type { SceneMaterialAssetSource } from "../scene/SceneMaterialRenderer.ts";
 
 interface SceneEditHistory {
     begin(label: string): void;
@@ -33,6 +34,11 @@ export class SceneHierarchyPane {
     private primitiveType: ScenePrimitiveType = "box";
     private snapSettings: SceneSnapSettings = structuredClone(DEFAULT_SCENE_SNAP_SETTINGS);
     private feedback = "";
+    private inspectorScrollTop = 0;
+    private treeScrollTop = 0;
+    private paneScrollTop = 0;
+    private readonly materialAssets = new Map<string, SceneMaterialAssetSource>();
+    private treeSize = 35;
 
     constructor(
         generator: WamGUIGenerator,
@@ -59,6 +65,12 @@ export class SceneHierarchyPane {
     init(_: GroupPanelPartInitParameters): void {}
 
     private render(): void {
+        const scrollTop = this.element.scrollTop || this.paneScrollTop;
+        const treeScrollTop = this.element.querySelector<HTMLElement>(".scene-hierarchy__tree")?.scrollTop || this.treeScrollTop;
+        const inspectorScrollTop = this.element.querySelector<HTMLElement>(".scene-hierarchy__inspector")?.scrollTop || this.inspectorScrollTop;
+        const activeLabel = document.activeElement instanceof HTMLElement
+            ? document.activeElement.getAttribute("aria-label")
+            : null;
         const sceneDocument = this.generator.scene_document.value;
         this.element.replaceChildren();
         const toolbar = html.a`<div class="scene-hierarchy__toolbar"></div>`;
@@ -104,6 +116,24 @@ export class SceneHierarchyPane {
             this.render();
             this.viewport.fitScene();
         }), !sceneDocument);
+        this.addButton(primitiveControls, "Add text", () => this.command("Add text visual", () => {
+            this.selectedId = this.editor.addTextVisual(this.selectedGroupId(sceneDocument));
+            this.editor.select([this.selectedId]);
+            this.render();
+            this.viewport.fitScene();
+        }), !sceneDocument);
+        const imageInput = document.createElement("input");
+        imageInput.type = "file";
+        imageInput.accept = "image/png,image/jpeg,image/webp";
+        imageInput.multiple = true;
+        imageInput.hidden = true;
+        imageInput.addEventListener("change", () => {
+            void this.importImages(imageInput.files);
+            imageInput.value = "";
+        });
+        const importImages = this.addButton(primitiveControls, "Import images", () => imageInput.click(), !sceneDocument);
+        importImages.title = "Import PNG, JPEG, or WebP files for material texture maps";
+        primitiveControls.appendChild(imageInput);
         this.element.appendChild(primitiveControls);
 
         const modeControls = html.a`<div class="scene-hierarchy__controls"></div>`;
@@ -170,6 +200,11 @@ export class SceneHierarchyPane {
 
         const tree = html.a`<div class="scene-hierarchy__tree" role="tree" aria-label="3D scene hierarchy"></div>`;
         this.element.appendChild(tree);
+        tree.style.flexBasis = `${this.treeSize}%`;
+        tree.style.maxHeight = `${this.treeSize}%`;
+        const splitter = html.a`<div class="scene-hierarchy__splitter" role="separator" aria-label="Resize hierarchy and inspector" tabindex="0"></div>`;
+        this.element.appendChild(splitter);
+        this.enableSplitter(splitter, tree);
         const children = new Map<string | null, SceneNode[]>();
         for (const node of sceneDocument.nodes) {
             const group = children.get(node.parent) ?? [];
@@ -228,6 +263,74 @@ export class SceneHierarchyPane {
         });
         this.viewport.setSceneTransformMode(this.transformKind, this.transformSpace);
         this.viewport.setSceneSnapSettings(this.snapSettings);
+        this.viewport.setSceneMaterialAssets(this.materialAssets);
+        const restoreScroll = (): void => {
+            if (activeLabel) {
+                const replacement = [...this.element.querySelectorAll<HTMLElement>("[aria-label]")]
+                    .find(element => element.getAttribute("aria-label") === activeLabel);
+                replacement?.focus({ preventScroll: true });
+            }
+
+            this.element.scrollTop = scrollTop;
+            this.element.querySelector<HTMLElement>(".scene-hierarchy__tree")?.scrollTo({ top: treeScrollTop });
+            this.element.querySelector<HTMLElement>(".scene-hierarchy__inspector")?.scrollTo({ top: inspectorScrollTop });
+            this.paneScrollTop = scrollTop;
+            this.treeScrollTop = treeScrollTop;
+            this.inspectorScrollTop = inspectorScrollTop;
+        };
+        restoreScroll();
+        requestAnimationFrame(restoreScroll);
+        window.setTimeout(restoreScroll, 0);
+        window.setTimeout(restoreScroll, 50);
+    }
+
+    private enableSplitter(splitter: HTMLElement, tree: HTMLElement): void {
+        const update = (clientY: number): void => {
+            const bounds = this.element.getBoundingClientRect();
+            this.treeSize = Math.max(15, Math.min(70, ((clientY - bounds.top) / bounds.height) * 100));
+            tree.style.flexBasis = `${this.treeSize}%`;
+            tree.style.maxHeight = `${this.treeSize}%`;
+        };
+        splitter.addEventListener("pointerdown", event => {
+            splitter.setPointerCapture(event.pointerId);
+            const move = (moveEvent: PointerEvent): void => update(moveEvent.clientY);
+            const stop = (): void => {
+                splitter.removeEventListener("pointermove", move);
+                splitter.removeEventListener("pointerup", stop);
+            };
+            splitter.addEventListener("pointermove", move);
+            splitter.addEventListener("pointerup", stop);
+        });
+        splitter.addEventListener("keydown", event => {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            this.treeSize += event.key === "ArrowDown" ? 5 : -5;
+            this.treeSize = Math.max(15, Math.min(70, this.treeSize));
+            tree.style.flexBasis = `${this.treeSize}%`;
+            tree.style.maxHeight = `${this.treeSize}%`;
+        });
+    }
+
+    private async importImages(files: FileList | null): Promise<void> {
+        if (!files || files.length === 0) return;
+        try {
+            for (const file of [...files]) {
+                const id = `image-${crypto.randomUUID()}`;
+                const uri = `textures/${file.name.replaceAll("\\", "_").replaceAll("/", "_")}`;
+                const mediaType = file.type as SceneAsset["media_type"];
+                const bytes = new Uint8Array(await file.arrayBuffer());
+                const asset: SceneAsset = { id, uri, media_type: mediaType };
+                this.materialAssets.set(id, { bytes, mediaType });
+                await this.runHistoryCommand(`Import image ${file.name}`, () => this.editor.addAsset(asset));
+            }
+            this.viewport.setSceneMaterialAssets(this.materialAssets);
+            this.feedback = `${files.length} image asset(s) imported. Select one in a material texture map.`;
+            this.render();
+        } catch (error) {
+            this.feedback = `Import images failed: ${error instanceof Error ? error.message : String(error)}`;
+            console.error("Unable to import scene images", error);
+            this.render();
+        }
     }
 
     private renderInspector(node: SceneNode, nodes: SceneNode[]): void {
@@ -263,6 +366,15 @@ export class SceneHierarchyPane {
         this.renderVectorInput(inspector, "Rotation (rad)", "rotation", node.transform.rotation, node.id);
         this.renderVectorInput(inspector, "Scale", "scale", node.transform.scale, node.id);
         this.renderVectorInput(inspector, "Pivot", "pivot", node.pivot, node.id);
+        if (node.kind === "visual" && node.visual_type === "text") {
+            const text = document.createElement("input");
+            text.type = "text";
+            text.value = node.text ?? "";
+            text.setAttribute("aria-label", "Visual text");
+            text.addEventListener("change", () => this.command("Edit visual text", () =>
+                this.editor.setVisualText(node.id, text.value)));
+            inspector.appendChild(this.labeled("Text", text));
+        }
         if (node.kind === "primitive") {
             const geometryHeading = html.a`<h3>Primitive geometry</h3>`;
             inspector.appendChild(geometryHeading);
@@ -320,7 +432,174 @@ export class SceneHierarchyPane {
                 inspector.appendChild(this.labeled(parameter.replaceAll("_", " "), controls));
             }
         }
+        this.renderMaterialInspector(inspector, node, this.generator.scene_document.value?.materials ?? []);
         this.element.appendChild(inspector);
+    }
+
+    private renderMaterialInspector(inspector: HTMLElement, node: SceneNode, materials: SceneMaterial[]): void {
+        const heading = html.a`<h3>Material</h3>`;
+        inspector.appendChild(heading);
+        const selectedId = node.material_refs?.[0]?.material_id ?? "";
+        const materialSelect = document.createElement("select");
+        materialSelect.setAttribute("aria-label", "Scene node material");
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = "Default";
+        materialSelect.appendChild(none);
+        for (const material of materials) {
+            const option = document.createElement("option");
+            option.value = material.id;
+            option.textContent = material.name ?? material.id;
+            materialSelect.appendChild(option);
+        }
+        materialSelect.value = selectedId;
+        materialSelect.addEventListener("change", () => this.command("Assign scene material", () =>
+            this.editor.assignMaterial(node.id, materialSelect.value || null)));
+        inspector.appendChild(this.labeled("Material", materialSelect));
+        const create = this.addButton(inspector, "Create material", () => this.command("Create scene material", () => {
+            const id = this.editor.createMaterial(`${node.name} material`);
+            this.editor.assignMaterial(node.id, id);
+        }), false);
+        create.title = "Create a serializable PBR material and assign it to this node";
+        const material = materials.find(candidate => candidate.id === selectedId);
+        if (!material) {
+            const help = html.a`<p class="scene-hierarchy__help"></p>`;
+            help.textContent = "Choose Create material to enable PBR controls. Texture selectors remain None until image assets are imported into this scene.";
+            inspector.appendChild(help);
+            return;
+        }
+        this.renderMaterialValue(inspector, material, "Metallic", "metallic", material.metallic ?? 0);
+        this.renderMaterialValue(inspector, material, "Roughness", "roughness", material.roughness ?? 0.5);
+        const color = document.createElement("input");
+        color.type = "color";
+        color.value = SceneHierarchyPane.colorToHex(material.base_color ?? [1, 1, 1, 1]);
+        color.setAttribute("aria-label", "Material base color");
+        color.addEventListener("change", () => this.command("Edit material base color", () =>
+            this.editor.setMaterial(material.id, { base_color: SceneHierarchyPane.hexToColor(color.value, material.base_color?.[3] ?? 1) })));
+        inspector.appendChild(this.labeled("Base color", color));
+        const alphaMode = document.createElement("select");
+        for (const mode of ["opaque", "mask", "blend"] as const) {
+            const option = document.createElement("option");
+            option.value = mode;
+            option.textContent = mode[0].toUpperCase() + mode.slice(1);
+            alphaMode.appendChild(option);
+        }
+        alphaMode.value = material.alpha_mode ?? "opaque";
+        alphaMode.setAttribute("aria-label", "Material alpha mode");
+        alphaMode.addEventListener("change", () => this.command("Edit material alpha mode", () =>
+            this.editor.setMaterial(material.id, { alpha_mode: alphaMode.value as "opaque" | "mask" | "blend" })));
+        inspector.appendChild(this.labeled("Alpha mode", alphaMode));
+        this.renderMaterialTextures(inspector, material);
+    }
+
+    private renderMaterialTextures(inspector: HTMLElement, material: SceneMaterial): void {
+        const help = html.a`<p class="scene-hierarchy__help"></p>`;
+        help.textContent = "Texture maps are optional image assets. None means this material uses its numeric/color value instead.";
+        inspector.appendChild(help);
+        const assets = (this.generator.scene_document.value?.assets ?? [])
+            .filter(asset => ["image/png", "image/jpeg", "image/webp"].includes(asset.media_type));
+        const textures = material.textures ?? {};
+        for (const key of ["base_color", "metallic_roughness", "normal", "occlusion", "emissive", "alpha"] as const) {
+            const select = document.createElement("select");
+            const none = document.createElement("option");
+            none.value = "";
+            none.textContent = "None";
+            select.appendChild(none);
+            for (const asset of assets) {
+                const option = document.createElement("option");
+                option.value = asset.id;
+                option.textContent = asset.uri;
+                select.appendChild(option);
+            }
+            select.value = textures[key]?.asset_id ?? "";
+            select.setAttribute("aria-label", `Material ${key.replace("_", " ")} texture`);
+            select.addEventListener("change", () => {
+                const nextTextures: SceneMaterialTextures = { ...textures };
+                if (!select.value) delete nextTextures[key];
+                else {
+                    const previous = textures[key];
+                    nextTextures[key] = previous ?? {
+                        asset_id: select.value,
+                        color_space: key === "base_color" || key === "emissive" || key === "alpha" ? "srgb" : "linear",
+                        wrap_u: "repeat",
+                        wrap_v: "repeat",
+                        filtering: "linear",
+                    };
+                    nextTextures[key] = { ...nextTextures[key], asset_id: select.value };
+                }
+                this.command(`Set ${key} texture`, () => this.editor.setMaterial(material.id, { textures: nextTextures }));
+            });
+            const labels: Record<typeof key, string> = {
+                base_color: "Base color map",
+                metallic_roughness: "Metallic/roughness map",
+                normal: "Normal map",
+                occlusion: "Occlusion map",
+                emissive: "Emissive map",
+                alpha: "Alpha map",
+            };
+            inspector.appendChild(this.labeled(labels[key], select));
+            const selectedTexture = textures[key];
+            if (selectedTexture) this.renderTextureSettings(inspector, material, key, selectedTexture);
+        }
+    }
+
+    private renderTextureSettings(
+        inspector: HTMLElement,
+        material: SceneMaterial,
+        key: keyof SceneMaterialTextures,
+        texture: SceneTextureReference,
+    ): void {
+        const colorSpace = document.createElement("select");
+        for (const value of ["srgb", "linear"] as const) {
+            const option = document.createElement("option");
+            option.value = value;
+            option.textContent = value;
+            colorSpace.appendChild(option);
+        }
+        colorSpace.value = texture.color_space;
+        colorSpace.setAttribute("aria-label", `${key} texture color space`);
+        colorSpace.addEventListener("change", () => this.command(`Set ${key} color space`, () =>
+            this.editor.setMaterial(material.id, {
+                textures: {
+                    ...material.textures,
+                    [key]: { ...texture, color_space: colorSpace.value as "srgb" | "linear" },
+                },
+            })));
+        inspector.appendChild(this.labeled(`${key} color space`, colorSpace));
+    }
+
+    private renderMaterialValue(
+        inspector: HTMLElement,
+        material: SceneMaterial,
+        label: string,
+        key: "metallic" | "roughness",
+        value: number,
+    ): void {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.max = "1";
+        input.step = "0.01";
+        input.value = String(value);
+        input.setAttribute("aria-label", `Material ${label.toLowerCase()}`);
+        input.addEventListener("change", () => {
+            const next = Number(input.value);
+            if (!Number.isFinite(next) || next < 0 || next > 1) {
+                input.value = String(value);
+                return;
+            }
+            void this.command(`Edit material ${key}`, () => this.editor.setMaterial(material.id, { [key]: next }));
+        });
+        inspector.appendChild(this.labeled(label, input));
+    }
+
+    private static colorToHex(color: [number, number, number, number]): string {
+        return `#${color.slice(0, 3).map(component => Math.round(component * 255).toString(16).padStart(2, "0")).join("")}`;
+    }
+
+    private static hexToColor(value: string, alpha: number): [number, number, number, number] {
+        const numeric = Number.parseInt(value.slice(1), 16);
+        return [(numeric >> 16 & 255) / 255, (numeric >> 8 & 255) / 255, (numeric & 255) / 255, alpha];
     }
 
     private selectedGroupId(sceneDocument: WamGuiSceneDocument | null): string | null {

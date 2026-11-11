@@ -370,6 +370,15 @@ The descriptor shape used by this model is:
 5.3. Add text/decal features with runtime-compatible fonts/asset packaging.  
 5.4. Test persistence, missing texture errors, color-space handling, and editor/runtime visual parity.
 
+#### Task 5 implementation record (2026-11-11)
+
+- **5.1 PBR materials:** Extended the renderer-neutral material model with base color/alpha, metallic, roughness, emissive color, alpha mode/cutoff, double-sidedness, normal, occlusion, and texture-map references. Scene Hierarchy now provides material assignment, material creation, base-color, metallic, and roughness controls. The Babylon preview applies assigned materials through `SceneMaterialRenderer`.
+- **5.2 UV and sampling settings:** Texture references now serialize UV set, offset, scale, rotation, sRGB/linear color space, U/V wrapping, and nearest/linear/trilinear filtering. The renderer applies these settings when caller-supplied asset bytes are available; missing texture assets fail explicitly instead of silently showing a placeholder.
+- **5.3 Text and decals:** Added serializable text visual fields (text, font family, font size, and size), an “Add text” authoring action, text editing, and a Babylon dynamic-text preview. Decal visual nodes can carry a project-relative decal asset reference, and the existing package pipeline preserves/validates those authorized assets. Runtime font/decal parity remains dependent on the external consumer renderer.
+- **5.4 Coverage and limitations:** Added material rendering/error coverage and retained descriptor/package round-trip validation for legacy and new scene data. Editor persistence and missing-resource behavior are verified locally. Full editor/runtime visual parity and image-backed decal rendering cannot be claimed until the external runtime renderer and asset-byte handoff are available.
+
+**Task 5 status:** 5.1–5.3 have editor/schema/API implementation and local coverage. 5.4 editor persistence and explicit missing-texture errors are verified; external runtime visual parity remains blocked on the companion runtime.
+
 ### Task 6 — Reusable interactive component system
 
 6.1. Define a component contract separating visual assembly, interaction behavior, parameter binding, and animation.  

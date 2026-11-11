@@ -3,17 +3,23 @@ import { html } from "../utils/doc.ts";
 import {
     ArcRotateCamera,
     Color4,
+    DynamicTexture,
     Engine,
     GizmoManager,
     Mesh,
+    MeshBuilder,
     Quaternion,
     Scene,
+    StandardMaterial,
     TransformNode,
     Vector3,
 } from "@babylonjs/core";
 import type { SceneTransform, WamGuiSceneDocument } from "../descriptor/WamGuiScene.ts";
 import type { SceneSnapSettings, SceneTransformSpace } from "../scene/SceneDocumentEditor.ts";
 import { createScenePrimitiveMesh } from "../scene/ScenePrimitiveRenderer.ts";
+import { createSceneMaterial } from "../scene/SceneMaterialRenderer.ts";
+import type { SceneMaterialAssets } from "../scene/SceneMaterialRenderer.ts";
+import type { SceneMaterial, SceneVisualNode } from "../descriptor/WamGuiScene.ts";
 
 
 export class WamGui3DPane implements IContentRenderer{
@@ -26,6 +32,8 @@ export class WamGui3DPane implements IContentRenderer{
     private gizmoManager: GizmoManager
     private readonly sceneNodes = new Map<string, TransformNode>()
     private readonly primitiveMeshes = new Map<string, Mesh>()
+    private readonly visualMeshes = new Map<string, Mesh>()
+    private materialAssets: SceneMaterialAssets = new Map()
     private readonly wiredGizmos = new WeakSet<object>()
     private sceneDocument: WamGuiSceneDocument | null = null
     private selectedSceneNode: string | null = null
@@ -100,12 +108,18 @@ export class WamGui3DPane implements IContentRenderer{
                 runtimeNode.dispose()
                 this.sceneNodes.delete(id)
             }
+
         }
         for (const mesh of this.primitiveMeshes.values()) {
             mesh.material?.dispose()
             mesh.dispose()
         }
         this.primitiveMeshes.clear()
+        for (const mesh of this.visualMeshes.values()) {
+            mesh.material?.dispose()
+            mesh.dispose()
+        }
+        this.visualMeshes.clear()
         for (const node of document?.nodes ?? []) {
             let runtimeNode = this.sceneNodes.get(node.id)
             if (!runtimeNode) {
@@ -130,10 +144,29 @@ export class WamGui3DPane implements IContentRenderer{
                 const mesh = createScenePrimitiveMesh(this.scene, node)
                 mesh.parent = runtimeNode
                 mesh.position.set(0, 0, 0)
+                this.applyMaterial(mesh, node.material_refs, document?.materials ?? [])
                 this.primitiveMeshes.set(node.id, mesh)
+            }
+            if (node.kind === "visual" && node.visual_type === "text") {
+                const mesh = this.createTextMesh(node)
+                mesh.parent = runtimeNode
+                this.applyMaterial(mesh, node.material_refs, document?.materials ?? [])
+                this.visualMeshes.set(node.id, mesh)
             }
         }
         this.attachSelectedSceneNode()
+    }
+
+    setSceneMaterialAssets(assets: SceneMaterialAssets): void {
+        this.materialAssets = assets
+        if (this.sceneDocument) {
+            this.setSceneDocument(
+                this.sceneDocument,
+                this.selectedSceneNode,
+                this.onSceneTransformStart ?? (() => {}),
+                this.onSceneTransformEnd ?? (() => {}),
+            )
+        }
     }
 
     setSceneTransformMode(mode: "position" | "rotation" | "scale", space: SceneTransformSpace): void {
@@ -237,6 +270,11 @@ export class WamGui3DPane implements IContentRenderer{
             mesh.dispose()
         }
         this.primitiveMeshes.clear()
+        for (const mesh of this.visualMeshes.values()) {
+            mesh.material?.dispose()
+            mesh.dispose()
+        }
+        this.visualMeshes.clear()
         this.renderLoopStarted = false
     }
 
@@ -259,6 +297,36 @@ export class WamGui3DPane implements IContentRenderer{
         const node = this.sceneDocument?.nodes.find(candidate => candidate.id === nodeId)
         if (!node || !node.visible) return false
         return node.parent === null || this.isEffectivelyVisible(node.parent)
+    }
+
+    private applyMaterial(mesh: Mesh, references: SceneVisualNode["material_refs"], materials: SceneMaterial[]): void {
+        const materialId = references?.[0]?.material_id
+        const material = materials.find(candidate => candidate.id === materialId)
+        if (!material) return
+        mesh.material?.dispose()
+        mesh.material = createSceneMaterial(this.scene, material, this.materialAssets)
+    }
+
+    private createTextMesh(node: SceneVisualNode): Mesh {
+        const size = node.size ?? [1, 0.3]
+        const texture = new DynamicTexture(`${node.id}:text`, { width: 1024, height: 256 }, this.scene, true)
+        texture.hasAlpha = true
+        const context = texture.getContext() as CanvasRenderingContext2D
+        context.clearRect(0, 0, 1024, 256)
+        context.fillStyle = "white"
+        context.font = `${Math.max(12, Math.round((node.font_size ?? 48) * 2))}px ${node.font_family ?? "Arial"}`
+        context.textAlign = "center"
+        context.textBaseline = "middle"
+        context.fillText(node.text ?? "", 512, 128)
+        texture.update()
+        const mesh = MeshBuilder.CreatePlane(node.name, { width: size[0], height: size[1] }, this.scene)
+        const material = new StandardMaterial(`${node.id}:text-material`, this.scene)
+        material.diffuseTexture = texture
+        material.opacityTexture = texture
+        material.emissiveColor.set(1, 1, 1)
+        material.backFaceCulling = false
+        mesh.material = material
+        return mesh
     }
 
     private updateGizmoSpace(): void {

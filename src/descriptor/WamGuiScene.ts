@@ -29,6 +29,39 @@ export interface SceneAssetReference {
 export interface SceneMaterial {
     id: string;
     name?: string;
+    base_color?: [number, number, number, number];
+    metallic?: number;
+    roughness?: number;
+    emissive_color?: [number, number, number];
+    normal_scale?: number;
+    occlusion_strength?: number;
+    alpha_mode?: "opaque" | "mask" | "blend";
+    alpha_cutoff?: number;
+    double_sided?: boolean;
+    textures?: SceneMaterialTextures;
+    [optionalProperty: string]: unknown;
+}
+
+export interface SceneTextureReference {
+    asset_id: string;
+    color_space: "srgb" | "linear";
+    uv_set?: number;
+    offset?: [number, number];
+    scale?: [number, number];
+    rotation?: number;
+    wrap_u?: "clamp" | "repeat" | "mirror";
+    wrap_v?: "clamp" | "repeat" | "mirror";
+    filtering?: "nearest" | "linear" | "trilinear";
+    [optionalProperty: string]: unknown;
+}
+
+export interface SceneMaterialTextures {
+    base_color?: SceneTextureReference;
+    metallic_roughness?: SceneTextureReference;
+    normal?: SceneTextureReference;
+    occlusion?: SceneTextureReference;
+    emissive?: SceneTextureReference;
+    alpha?: SceneTextureReference;
     [optionalProperty: string]: unknown;
 }
 
@@ -110,6 +143,11 @@ export interface SceneInteractiveNode extends SceneNodeBase {
 export interface SceneVisualNode extends SceneNodeBase {
     kind: "visual";
     visual_type: "mesh" | "text" | "decal";
+    text?: string;
+    font_family?: string;
+    font_size?: number;
+    decal_asset?: SceneAssetReference;
+    size?: [number, number];
     asset?: SceneAssetReference;
 }
 
@@ -186,6 +224,14 @@ function readVector(value: unknown, name: string, fallback: SceneVector3): Scene
     return value.map((component, index) => requireFinite(component, `${name}[${index}]`)) as SceneVector3;
 }
 
+function readTuple(value: unknown, name: string, length: number, fallback: number[]): number[] {
+    if (value === undefined) return [...fallback];
+    if (!Array.isArray(value) || value.length !== length) {
+        throw new TypeError(`${name} must be an array of exactly ${length} finite numbers`);
+    }
+    return value.map((component, index) => requireFinite(component, `${name}[${index}]`));
+}
+
 function readTransform(value: unknown, name: string): SceneTransform {
     const transform = value === undefined ? {} : requireRecord(value, name);
     const position = readVector(transform.position, `${name}.position`, [0, 0, 0]);
@@ -232,11 +278,81 @@ function readAsset(value: unknown, index: number): SceneAsset {
     return { ...structuredClone(source), id, uri, media_type: source.media_type as SceneAsset["media_type"] };
 }
 
-function readMaterial(value: unknown, index: number): SceneMaterial {
+function readTextureReference(value: unknown, name: string, assetIds: Set<string>): SceneTextureReference {
+    const source = requireRecord(value, name);
+    const assetId = requireId(source.asset_id, `${name}.asset_id`);
+    if (!assetIds.has(assetId)) throw new TypeError(`${name}.asset_id "${assetId}" does not reference a declared scene asset`);
+    const colorSpace = source.color_space ?? "srgb";
+    if (colorSpace !== "srgb" && colorSpace !== "linear") throw new TypeError(`${name}.color_space must be "srgb" or "linear"`);
+    const uvSet = source.uv_set === undefined ? undefined : requireFinite(source.uv_set, `${name}.uv_set`);
+    if (uvSet !== undefined && (!Number.isInteger(uvSet) || uvSet < 0)) throw new RangeError(`${name}.uv_set must be a non-negative integer`);
+    const offset = source.offset === undefined ? undefined : readTuple(source.offset, `${name}.offset`, 2, [0, 0]) as [number, number];
+    const scale = source.scale === undefined ? undefined : readTuple(source.scale, `${name}.scale`, 2, [1, 1]) as [number, number];
+    const rotation = source.rotation === undefined ? undefined : requireFinite(source.rotation, `${name}.rotation`);
+    const wrap = (value: unknown, label: string): "clamp" | "repeat" | "mirror" => {
+        const result = value ?? "repeat";
+        if (result !== "clamp" && result !== "repeat" && result !== "mirror") throw new TypeError(`${label} must be "clamp", "repeat", or "mirror"`);
+        return result;
+    };
+    const filtering = source.filtering ?? "linear";
+    if (filtering !== "nearest" && filtering !== "linear" && filtering !== "trilinear") throw new TypeError(`${name}.filtering is unsupported`);
+    return {
+        ...structuredClone(source),
+        asset_id: assetId,
+        color_space: colorSpace,
+        ...(uvSet === undefined ? {} : { uv_set: uvSet }),
+        ...(offset === undefined ? {} : { offset }),
+        ...(scale === undefined ? {} : { scale }),
+        ...(rotation === undefined ? {} : { rotation }),
+        wrap_u: wrap(source.wrap_u, `${name}.wrap_u`),
+        wrap_v: wrap(source.wrap_v, `${name}.wrap_v`),
+        filtering,
+    };
+}
+
+function readMaterial(value: unknown, index: number, assetIds: Set<string>): SceneMaterial {
     const source = requireRecord(value, `scene.materials[${index}]`);
     const id = requireId(source.id, `scene.materials[${index}].id`);
     const name = source.name === undefined ? undefined : requireString(source.name, `scene.materials[${index}].name`);
-    return { ...structuredClone(source), id, ...(name === undefined ? {} : { name }) };
+    const baseColor = source.base_color === undefined ? undefined : readTuple(source.base_color, `scene.materials[${index}].base_color`, 4, [1, 1, 1, 1]);
+    if (baseColor?.some(value => value < 0 || value > 1)) throw new RangeError(`scene.materials[${index}].base_color values must be between 0 and 1`);
+    const emissiveColor = source.emissive_color === undefined ? undefined : readTuple(source.emissive_color, `scene.materials[${index}].emissive_color`, 3, [0, 0, 0]);
+    if (emissiveColor?.some(value => value < 0 || value > 1)) throw new RangeError(`scene.materials[${index}].emissive_color values must be between 0 and 1`);
+    const bounded = (key: string): number | undefined => {
+        if (source[key] === undefined) return undefined;
+        const result = requireFinite(source[key], `scene.materials[${index}].${key}`);
+        if (result < 0 || result > 1) throw new RangeError(`scene.materials[${index}].${key} must be between 0 and 1`);
+        return result;
+    };
+    const metallic = bounded("metallic");
+    const roughness = bounded("roughness");
+    const alphaCutoff = bounded("alpha_cutoff");
+    const normalScale = bounded("normal_scale");
+    const occlusionStrength = bounded("occlusion_strength");
+    const alphaMode = source.alpha_mode ?? "opaque";
+    if (alphaMode !== "opaque" && alphaMode !== "mask" && alphaMode !== "blend") throw new TypeError(`scene.materials[${index}].alpha_mode is unsupported`);
+    if (source.double_sided !== undefined && typeof source.double_sided !== "boolean") throw new TypeError(`scene.materials[${index}].double_sided must be a boolean`);
+    const textures = source.textures === undefined ? undefined : requireRecord(source.textures, `scene.materials[${index}].textures`);
+    const normalizedTextures = textures === undefined ? undefined : Object.fromEntries(
+        ["base_color", "metallic_roughness", "normal", "occlusion", "emissive", "alpha"]
+            .filter(key => textures[key] !== undefined)
+            .map(key => [key, readTextureReference(textures[key], `scene.materials[${index}].textures.${key}`, assetIds)]),
+    ) as SceneMaterialTextures;
+    return {
+        ...structuredClone(source),
+        id,
+        ...(name === undefined ? {} : { name }),
+        ...(baseColor === undefined ? {} : { base_color: baseColor as [number, number, number, number] }),
+        ...(metallic === undefined ? {} : { metallic }),
+        ...(roughness === undefined ? {} : { roughness }),
+        ...(emissiveColor === undefined ? {} : { emissive_color: emissiveColor as [number, number, number] }),
+        ...(normalScale === undefined ? {} : { normal_scale: normalScale }),
+        ...(occlusionStrength === undefined ? {} : { occlusion_strength: occlusionStrength }),
+        ...(alphaMode === "opaque" ? {} : { alpha_mode: alphaMode }),
+        ...(alphaCutoff === undefined ? {} : { alpha_cutoff: alphaCutoff }),
+        ...(source.double_sided === undefined ? {} : { double_sided: source.double_sided }),
+        ...(normalizedTextures === undefined ? {} : { textures: normalizedTextures }),
+    };
 }
 
 function readAssetReference(value: unknown, name: string, assetIds: Set<string>): SceneAssetReference {
@@ -421,10 +537,24 @@ function readNode(
             if (visualType !== "mesh" && visualType !== "text" && visualType !== "decal") {
                 throw new TypeError(`scene.nodes[${index}].visual_type is unsupported`);
             }
+            const text = source.text === undefined ? undefined : requireString(source.text, `scene.nodes[${index}].text`);
+            const fontFamily = source.font_family === undefined ? undefined : requireString(source.font_family, `scene.nodes[${index}].font_family`);
+            const fontSize = source.font_size === undefined ? undefined : requireFinite(source.font_size, `scene.nodes[${index}].font_size`);
+            if (fontSize !== undefined && fontSize <= 0) throw new RangeError(`scene.nodes[${index}].font_size must be greater than 0`);
+            const size = source.size === undefined ? undefined : readTuple(source.size, `scene.nodes[${index}].size`, 2, [1, 1]) as [number, number];
+            if (size?.some(value => value <= 0)) throw new RangeError(`scene.nodes[${index}].size values must be greater than 0`);
+            const decalAsset = source.decal_asset === undefined
+                ? undefined
+                : readAssetReference(source.decal_asset, `scene.nodes[${index}].decal_asset`, assetIds);
             return {
                 ...base,
                 kind: "visual",
                 visual_type: visualType,
+                ...(text === undefined ? {} : { text }),
+                ...(fontFamily === undefined ? {} : { font_family: fontFamily }),
+                ...(fontSize === undefined ? {} : { font_size: fontSize }),
+                ...(size === undefined ? {} : { size }),
+                ...(decalAsset === undefined ? {} : { decal_asset: decalAsset }),
                 ...(source.asset === undefined ? {} : { asset: readAssetReference(source.asset, `scene.nodes[${index}].asset`, assetIds) }),
             } as SceneVisualNode;
         }
@@ -474,12 +604,12 @@ export function normalizeWamGuiScene(input: unknown): WamGuiSceneDocument {
         : Array.isArray(source.assets)
             ? source.assets.map(readAsset)
             : (() => { throw new TypeError("scene.assets must be an array"); })();
+    const assetIds = new Set(assets.map(asset => asset.id));
     const materials = source.materials === undefined
         ? []
         : Array.isArray(source.materials)
-            ? source.materials.map(readMaterial)
+            ? source.materials.map((material, index) => readMaterial(material, index, assetIds))
             : (() => { throw new TypeError("scene.materials must be an array"); })();
-    const assetIds = new Set(assets.map(asset => asset.id));
     const materialIds = new Set(materials.map(material => material.id));
     if (assetIds.size !== assets.length) throw new TypeError("scene.assets must not contain duplicate IDs");
     if (materialIds.size !== materials.length) throw new TypeError("scene.materials must not contain duplicate IDs");

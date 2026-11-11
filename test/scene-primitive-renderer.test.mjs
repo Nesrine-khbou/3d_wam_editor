@@ -20,6 +20,7 @@ const {
     SceneDocumentEditor,
     WAM_GUI_SCENE_COORDINATE_SYSTEM,
     WAM_GUI_SCENE_TRANSFORM_CONVENTION,
+    createSceneMaterial,
     createScenePrimitiveMesh,
     normalizeWamGuiScene,
 } = await import("../dist/index.js");
@@ -139,4 +140,37 @@ test("scene validation rejects impossible rounded radii and invalid tessellation
         ...base,
         nodes: [primitiveNode("cylinder", { tessellation: 2 })],
     }), /integer of at least 3/);
+});
+
+test("PBR materials preserve values, UV settings, and reject missing texture assets", () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const material = createSceneMaterial(scene, {
+        id: "panel",
+        base_color: [0.2, 0.4, 0.8, 0.75],
+        metallic: 0.7,
+        roughness: 0.25,
+        alpha_mode: "blend",
+    }, new Map());
+    assert.equal(material.albedoColor.r, 0.2);
+    assert.equal(material.metallic, 0.7);
+    assert.equal(material.roughness, 0.25);
+    assert.throws(() => createSceneMaterial(scene, {
+        id: "panel-with-texture",
+        textures: {
+            base_color: {
+                asset_id: "missing-texture",
+                color_space: "srgb",
+                offset: [0.1, 0.2],
+                scale: [2, 3],
+                rotation: 0.5,
+                wrap_u: "repeat",
+                wrap_v: "clamp",
+                filtering: "nearest",
+            },
+        },
+    }, new Map()), /missing-texture/);
+    material.dispose();
+    scene.dispose();
+    engine.dispose();
 });
